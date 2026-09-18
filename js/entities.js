@@ -1,19 +1,20 @@
 /**
- * 游戏实体：植物、僵尸、豌豆、阳光、除草车、特效
+ * 游戏实体：植物、僵尸、豌豆、掉落的牌、除草车、特效
  * 所有逻辑均按 dt（秒）推进，暂停/加速只需控制 dt
  */
 const BIG_DMG = 1800               // 爆炸类植物伤害
 const BOSS_BIG_DMG = 600           // 爆炸类植物对僵尸王的伤害上限
 
 class Plant {
-  constructor (type, row, col) {
+  constructor (type, row, col, opts = {}) {
     const def = PLANTS[type], m = G.mods
     this.type = type
     this.def = def
     this.row = row
     this.col = col
     this.x = cellCx(col)
-    this.maxHp = def.hp * m.plantHp * (type === 'wallnut' ? m.wallnutHp : 1)
+    this.maxHp = def.hp * m.plantHp * (type === 'wallnut' ? m.wallnutHp : 1) * (opts.hpMul || 1)
+    this.dmgMul = opts.dmgMul || 1  // 爆炸类伤害倍率（字牌对子 = 0.5）
     this.hp = this.maxHp
     this.anims = {}
     for (const k in def.anim) this.anims[k] = new Anim(def.anim[k], def.fps, true)
@@ -63,7 +64,7 @@ class Plant {
     }
     this.shootTimer -= dt
     if (hasTarget && this.shootTimer <= 0) {
-      this.shootTimer = s.interval / m.fireRate
+      this.shootTimer = s.interval / (m.fireRate * (m.tenpaiRage && G.tenpai ? 1.3 : 1))
       const shots = s.shots + m.extraShots
       for (let i = 0; i < shots; i++) this.shotQueue.push(i * 0.13)
     }
@@ -72,7 +73,7 @@ class Plant {
     this.t -= dt
     if (this.t <= 0) {
       this.t = 12 / G.mods.sunflowerRate
-      G.suns.push(new Sun(this.x - 10, rowTop(this.row) + 30, G.mods.sunflowerAmt, 'plant'))
+      for (let i = 0; i < G.mods.sunflowerAmt; i++) G.dropTile(this.x - 10 + i * 20, rowTop(this.row) + 30, 'plant')
     }
   }
   update_wallnut () {
@@ -170,7 +171,7 @@ class Plant {
       this.setState('attack')
       this.anims.attack.loop = false
       const r = G.mods.cherryRange
-      blast(z => Math.abs(z.row - this.row) <= r && Math.abs(z.x - this.x) < (r + 0.5) * CELL_W + 25)
+      blast(z => Math.abs(z.row - this.row) <= r && Math.abs(z.x - this.x) < (r + 0.5) * CELL_W + 25, this.dmgMul)
       FX.explosion(this.x, rowTop(this.row) + 50, r)
       G.impact(0.45, 0.09, 'rgba(255,230,180,0.6)')
       Sound.play('explode')
@@ -182,7 +183,7 @@ class Plant {
     if (this.state === 'idle' && this.anim.done) {
       this.setState('explode')
       this.anims.explode.loop = false
-      blast(z => z.row === this.row)
+      blast(z => z.row === this.row, this.dmgMul)
       FX.fireRow(this.row)
       G.impact(0.4, 0.08, 'rgba(255,140,40,0.45)')
       Sound.play('fireRow')
@@ -231,14 +232,14 @@ class Plant {
 }
 
 // 对满足条件的僵尸造成爆炸伤害
-function blast (pred) {
+function blast (pred, mul = 1) {
   const hits = G.zombies.filter(z => z.alive && z.x < W && pred(z))
-  for (const z of hits) z.damage(z.def.boss ? BOSS_BIG_DMG : BIG_DMG, { boom: true })
+  for (const z of hits) z.damage((z.def.boss ? BOSS_BIG_DMG : BIG_DMG) * mul, { boom: true })
   if (!hits.length) return
   // 多只僵尸同时受击时只显示一个合并的伤害数字
   const cx = hits.reduce((a, z) => a + z.x, 0) / hits.length + 20
   const cy = hits.reduce((a, z) => a + zombieGround(z.row), 0) / hits.length - 120
-  const dmg = hits.some(z => z.def.boss) ? BOSS_BIG_DMG : BIG_DMG
+  const dmg = (hits.some(z => z.def.boss) ? BOSS_BIG_DMG : BIG_DMG) * mul
   G.dmgText(dmg + (hits.length > 1 ? ' ×' + hits.length : ''), cx, cy, true)
 }
 
@@ -474,15 +475,19 @@ class Pea {
   }
 }
 
-class Sun {
-  constructor (x, y, value, source) {
+/**
+ * 掉落的麻将牌（天降 / 向日葵），点击收进手牌
+ */
+class TileDrop {
+  constructor (tile, x, y, source, lucky) {
+    this.tile = tile
+    this.lucky = lucky            // 好牌：金色光晕
     this.x = x
     this.y = y
-    this.value = value
-    this.anim = new Anim('misc/sun', 12)
-    this.life = 7
+    this.life = 8
     this.collecting = false
     this.dead = false
+    this.bob = Math.random() * 6
     if (source === 'sky') {
       this.vy = 90
       this.targetY = 160 + Math.random() * 330
@@ -496,15 +501,15 @@ class Sun {
     this.landT = 0
   }
   update (dt) {
-    this.anim.update(dt)
+    this.bob += dt
     if (this.collecting) {
-      const tx = 132, ty = 2
-      this.x += (tx - this.x) * Math.min(1, dt * 7)
-      this.y += (ty - this.y) * Math.min(1, dt * 7)
-      if (Math.abs(this.x - tx) < 6 && Math.abs(this.y - ty) < 6) {
+      const tx = HAND_X + G.hand.length * HAND_STEP, ty = HAND_Y
+      this.x += (tx - this.x) * Math.min(1, dt * 9)
+      this.y += (ty - this.y) * Math.min(1, dt * 9)
+      if (Math.abs(this.x - tx) < 8 && Math.abs(this.y - ty) < 8) {
         this.dead = true
-        G.sun += this.value
-        UI.bumpSun()
+        G.pendingDrops--
+        if (!G.addToHand(this.tile)) G.deck.putBack([this.tile])
       }
       return
     }
@@ -517,22 +522,36 @@ class Sun {
     } else {
       this.landT += dt
       this.life -= dt
-      if (G.mods.autoCollect && this.landT > 0.6) this.collect()
-      if (this.life <= 0) this.dead = true
+      if (G.mods.autoCollect && this.landT > 0.6 && G.handRoom() > 0) this.collect()
+      if (this.life <= 0) { this.dead = true; G.deck.putBack([this.tile]) }
     }
   }
   hitTest (px, py) {
-    return !this.collecting && Math.hypot(px - (this.x + 39), py - (this.y + 39)) < 40
+    return !this.collecting && px > this.x - 8 && px < this.x + TILE_W + 8 && py > this.y - 8 && py < this.y + TILE_H + 8
   }
   collect () {
     if (this.collecting) return
+    if (G.handRoom() <= 0) {
+      Sound.play('deny')
+      G.floatText('手牌已满', this.x, this.y - 10, '#ff8a7a')
+      return
+    }
+    G.pendingDrops++
     this.collecting = true
-    FX.sparkle(this.x + 39, this.y + 39)
+    FX.sparkle(this.x + TILE_W / 2, this.y + TILE_H / 2)
     Sound.play('sun')
   }
   draw (x) {
     if (this.life < 2 && !this.collecting) x.globalAlpha = 0.5 + 0.5 * Math.abs(Math.sin(this.life * 8))
-    x.drawImage(this.anim.img, this.x, this.y)
+    const oy = this.collecting || this.y < this.targetY ? 0 : Math.sin(this.bob * 3) * 3
+    // 光晕，提示可以点击
+    if (!this.collecting) {
+      if (this.lucky) { x.shadowColor = '#ffc400'; x.shadowBlur = 14 + 6 * Math.sin(this.bob * 6) }
+      x.fillStyle = this.lucky ? 'rgba(255,200,40,0.6)' : 'rgba(255,235,120,0.35)'
+      roundRect(x, this.x - 5, this.y + oy - 5, TILE_W + 10, TILE_H + 10, 9); x.fill()
+      x.shadowBlur = 0
+    }
+    drawTile(x, this.tile, this.x, this.y + oy, TILE_W, TILE_H)
     x.globalAlpha = 1
   }
 }

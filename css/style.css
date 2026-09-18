@@ -41,7 +41,7 @@ button:disabled {
 /* —— HUD —— */
 #hud {
   position: absolute;
-  left: 112px;
+  left: 484px;
   top: 4px;
   right: 8px;
   display: flex;
@@ -105,7 +105,7 @@ button:disabled {
 }
 .stage-box {
   margin-left: auto;
-  width: 290px;
+  width: 250px;
   padding: 5px 10px 7px;
   border: 2px solid #3d1f06;
   border-radius: 8px;
@@ -450,7 +450,7 @@ button:disabled {
 }
 .stats {
   display: flex;
-  gap: 40px;
+  gap: 28px;
   margin-top: 16px;
   color: #bbb;
   font-size: 14px;
@@ -459,4 +459,10 @@ button:disabled {
   display: block;
   color: #ffe066;
   font-size: 30px;
+}
+
+#end .seed {
+  margin-top: 12px;
+  color: #777;
+  font-size: 12px;
 }

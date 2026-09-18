@@ -112,3 +112,60 @@ function roundRect (x, l, t, w, h, r) {
   x.arcTo(l, t, l + w, t, r)
   x.closePath()
 }
+
+/**
+ * 麻将牌面：程序化绘制，按牌种缓存成离屏画布
+ */
+const TILE_W = 40, TILE_H = 54                 // 手牌尺寸
+const HAND_X = 112, HAND_Y = 8, HAND_STEP = 44  // 手牌区位置
+const SEED_Y = 26, SEED_STEP = 48               // 左侧待种植物槽
+const PANEL_BUTTONS = [
+  { action: 'combine', label: '组合', key: 'Q', x: 6, y: 180, w: 92, h: 38, color: '#3f8f2f' },
+  { action: 'discard', label: '打出', key: 'X', x: 6, y: 224, w: 92, h: 38, color: '#8a5a2b' },
+  { action: 'declareHu', label: '胡！', key: 'H', x: 6, y: 272, w: 92, h: 56, color: '#d9962a', big: true },
+]
+const TILE_IMAGES = {}
+const TILE_COLOR = { m: '#b3261e', p: '#1f5fa8', s: '#1e7a3a' }
+const TILE_FONT = '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", serif'
+function tileImage (t) {
+  if (TILE_IMAGES[t]) return TILE_IMAGES[t]
+  const S = 2                                  // 2 倍分辨率，缩放后依然清晰
+  const c = document.createElement('canvas')
+  c.width = TILE_W * S; c.height = TILE_H * S
+  const x = c.getContext('2d')
+  x.scale(S, S)
+  // 牌身厚度（绿色牌背）
+  roundRect(x, 1, 3, TILE_W - 2, TILE_H - 4, 6)
+  x.fillStyle = '#2f8a57'; x.fill()
+  // 牌面
+  const g = x.createLinearGradient(0, 0, 0, TILE_H)
+  g.addColorStop(0, '#fffdf4'); g.addColorStop(1, '#efe6c8')
+  roundRect(x, 1, 1, TILE_W - 2, TILE_H - 7, 6)
+  x.fillStyle = g; x.fill()
+  x.lineWidth = 1; x.strokeStyle = 'rgba(80,60,20,0.35)'; x.stroke()
+  x.textAlign = 'center'; x.textBaseline = 'middle'
+  const su = Mahjong.suit(t), n = Mahjong.num(t)
+  if (su === 'z') {
+    if (n === 3) {
+      // 白板：蓝色方框
+      x.lineWidth = 2.5; x.strokeStyle = '#1f5fa8'
+      roundRect(x, 9, 9, TILE_W - 18, TILE_H - 25, 3); x.stroke()
+    } else {
+      x.font = 'bold 28px ' + TILE_FONT
+      x.fillStyle = n === 1 ? '#c0281e' : '#1e7a3a'
+      x.fillText(n === 1 ? '中' : '發', TILE_W / 2, TILE_H / 2 - 3)
+    }
+  } else {
+    x.font = 'bold 20px ' + TILE_FONT
+    x.fillStyle = su === 'm' ? '#222' : TILE_COLOR[su]
+    x.fillText('一二三四五六七八九'[n - 1], TILE_W / 2, 16)
+    x.font = 'bold 17px ' + TILE_FONT
+    x.fillStyle = TILE_COLOR[su]
+    x.fillText({ m: '萬', p: '饼', s: '条' }[su], TILE_W / 2, 35)
+  }
+  TILE_IMAGES[t] = c
+  return c
+}
+function drawTile (x, t, l, top, w = TILE_W, h = TILE_H) {
+  x.drawImage(tileImage(t), l, top, w, h)
+}

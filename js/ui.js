@@ -15,7 +15,6 @@ const UI = {
     $('title').classList.remove('hidden')
   },
   updateHud () {
-    $('sunNum').textContent = Math.floor(G.sun)
     $('shovelBtn').classList.toggle('active', G.selected === 'shovel')
     $('speedBtn').textContent = G.speed + '×'
     if (G.spawns) {
@@ -23,10 +22,6 @@ const UI = {
       $('progressFill').style.width = (p * 100) + '%'
     }
   },
-  // 阳光数字跳动
-  bumpSun () { this.pulse($('sunNum').parentNode, 'bump') },
-  // 阳光不足时闪红
-  flashSun () { this.pulse($('sunNum').parentNode, 'deny') },
   pulse (el, cls) {
     el.classList.remove(cls)
     void el.offsetWidth
@@ -56,12 +51,12 @@ const UI = {
     clearTimeout(this.bannerTimer)
     this.bannerTimer = setTimeout(() => b.classList.remove('show'), time * 1000)
   },
-  cardTip (type, i) {
+  cardTip (seed, i) {
     const tip = $('cardTip')
-    if (!type) { tip.classList.add('hidden'); return }
-    const d = PLANTS[type]
-    tip.innerHTML = '<b>' + d.name + '</b><span>☀️ ' + G.cost(type) + '　⏱️ ' + G.cardCd(type).toFixed(1) + ' 秒</span><p>' + d.desc + '</p>'
-    tip.style.top = Math.min(2 + i * (CARD_H + 2), H - 110) + 'px'
+    if (!seed) { tip.classList.add('hidden'); return }
+    const d = PLANTS[seed.plant]
+    tip.innerHTML = '<b>' + (seed.label || d.name) + '</b><span>' + seed.tiles.map(Mahjong.name).join(' ') + '</span><p>' + d.desc + '</p>'
+    tip.style.top = Math.min(SEED_Y + i * SEED_STEP, H - 110) + 'px'
     tip.classList.remove('hidden')
   },
   // 三选一
@@ -106,7 +101,7 @@ const UI = {
       return '<li><span>' + u.icon + '</span><b style="color:' + RARITY[u.rarity].color + '">' + u.name + (n > 1 ? ' ×' + n : '') + '</b>' + u.desc + '</li>'
     }).join('') : '<li>还没有任何强化</li>'
     box.innerHTML = '<h2>游戏暂停</h2><h3>已获得的强化</h3><ul>' + list + '</ul>' +
-      '<p class="keys">快捷键：1~0 选卡片　S 铲子　F 加速　M 静音　空格 暂停　右键/Esc 取消</p>' +
+      '<p class="keys">点牌选中　Q 组合　X 打出（或右键手牌）　H 胡牌　1~3 选待种植物<br>S 铲子　F 加速　M 静音　空格 暂停　Esc 取消</p>' +
       '<div class="btns"><button id="resumeBtn">继续游戏</button><button id="quitBtn" class="ghost">放弃本局</button></div>'
     $('resumeBtn').onclick = () => G.togglePause()
     $('quitBtn').onclick = () => { G.state = 'title'; Sound.stopMusic(); this.showTitle() }
@@ -118,7 +113,9 @@ const UI = {
     box.innerHTML = (win ? '<h2 class="win">🏆 胜利！</h2><p>你击败了铁桶僵尸王，守住了房子！</p>'
       : '<img src="images/zombieWon.png" alt="僵尸吃掉了你的脑子"><p>倒在了第 ' + (G.stageIndex + 1) + ' 关</p>') +
       '<div class="stats"><div><b>' + G.kills + '</b>消灭僵尸</div><div><b>' + Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0') + '</b>用时</div>' +
-      '<div><b>' + G.owned.length + '</b>获得强化</div></div>' +
+      '<div><b>' + G.huCount + '</b>胡牌次数</div>' +
+      '<div><b>' + (G.bestFan ? '×' + G.bestFan.mul : '—') + '</b>' + (G.bestFan ? G.bestFan.names.join('·') : '最大番') + '</div></div>' +
+      '<p class="seed">本局种子 ' + G.seed + '</p>' +
       '<div class="btns"><button id="againBtn">再来一局</button></div>'
     $('againBtn').onclick = () => { Sound.startMusic('calm'); Sound.setMusicMode('calm'); G.startRun() }
     box.classList.toggle('lose', !win)

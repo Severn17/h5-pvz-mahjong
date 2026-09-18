@@ -285,6 +285,23 @@ const SFX = {
     chord.forEach((n, i) => this.tone({ type: 'triangle', f0: midi(n), dur: 0.5, vol: 0.18, delay: i * 0.06 }))
     if (rarity === 'legendary') this.noise({ dur: 0.8, vol: 0.12, type: 'highpass', f0: 6000, delay: 0.2, attack: 0.1 })
   } },
+  // —— 麻将 ——
+  tile: { gap: 0.05, fn () {
+    this.noise({ dur: 0.05, vol: 0.25, type: 'bandpass', f0: 2600, q: 4 })
+    this.tone({ type: 'triangle', f0: 1400, f1: 900, dur: 0.05, vol: 0.1 })
+  } },
+  meld: { fn () {
+    [0, 0.07, 0.14].forEach(d => this.noise({ dur: 0.05, vol: 0.25, type: 'bandpass', f0: 2400, q: 4, delay: d }))
+    this.tone({ type: 'triangle', f0: 660, f1: 990, dur: 0.18, vol: 0.14, delay: 0.16 })
+  } },
+  tenpai: { fn () {
+    this.tone({ type: 'triangle', f0: midi(76), dur: 0.12, vol: 0.14 })
+    this.tone({ type: 'triangle', f0: midi(81), dur: 0.2, vol: 0.14, delay: 0.1 })
+  } },
+  hu: { fn () {
+    this.noise({ dur: 1.1, vol: 0.6, f0: 4000, f1: 150, attack: 0.002 });
+    [72, 76, 79, 84, 88].forEach((n, i) => this.tone({ type: 'square', f0: midi(n), dur: 0.2, vol: 0.12, delay: 0.1 + i * 0.08 }))
+  } },
   reroll: { fn () { for (let i = 0; i < 5; i++) this.tone({ type: 'square', f0: 600 + i * 150, dur: 0.04, vol: 0.06, delay: i * 0.04 }) } },
   victory: { fn () {
     [60, 64, 67, 72, 67, 72, 76, 79].forEach((n, i) => this.tone({ type: 'square', f0: midi(n), dur: 0.22, vol: 0.12, delay: i * 0.13 }))

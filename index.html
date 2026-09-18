@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>植物大战僵尸 · 肉鸽版</title>
+  <title>植物麻将 · 肉鸽塔防</title>
   <link rel="stylesheet" href="css/common.css">
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -12,7 +12,6 @@
 
 <!-- 顶部状态栏 -->
 <div id="hud" class="hidden">
-  <div class="sun-box"><img src="images/misc/sun/00.png" alt=""><span id="sunNum">0</span></div>
   <button id="shovelBtn" title="铲子（S）">⛏️</button>
   <div class="stage-box">
     <div class="stage-top"><span id="stageLabel"></span><span id="modChip" class="chip"></span></div>
@@ -29,17 +28,17 @@
 
 <!-- 加载 -->
 <div id="loading" class="overlay">
-  <h1>植物大战僵尸</h1>
+  <h1>植物麻将</h1>
   <div class="load-bar"><div id="loadFill"></div></div>
 </div>
 <!-- 标题 -->
 <div id="title" class="overlay hidden">
-  <h1>植物大战僵尸<small>肉鸽版</small></h1>
+  <h1>植物麻将<small>肉鸽塔防</small></h1>
   <ul class="rules">
-    <li>🌱 13 种植物全部开放，<b>阳光</b>决定你种什么</li>
-    <li>🧟 共 4 关，第 4 关迎战 <b>铁桶僵尸王</b></li>
-    <li>🎁 开局与每关结束后 <b>三选一强化</b>，打造你的流派</li>
-    <li>🎲 每关随机特性，每局都不一样（约 3 分钟）</li>
+    <li>🀄 自动摸牌，凑成 <b>顺子 / 刻子</b> 就能种植物：<b>条</b>=射手　<b>饼</b>=防御　<b>萬</b>=功能　<b>字牌</b>=炸弹</li>
+    <li>🔥 手里 8 张凑成 <b>2 面子 + 1 对</b>（或 4 对）就能 <b>胡牌</b>：全场伤害，番数越高越痛</li>
+    <li>🧟 共 4 关，第 4 关迎战 <b>铁桶僵尸王</b>；每关结束 <b>三选一强化</b></li>
+    <li>⌨️ 点牌选中　Q 组合　X / 右键 打出　H 胡</li>
   </ul>
   <button id="startBtn">开始冒险</button>
   <p class="credit">原项目：David Yang（yangyunhe369）· 新增素材来自 marblexu/PythonPlantsVsZombies</p>
@@ -50,6 +49,7 @@
 
 <script src="js/fit.js"></script>
 <script src="js/manifest.js"></script>
+<script src="js/mahjong.js"></script>
 <script src="js/data.js"></script>
 <script src="js/assets.js"></script>
 <script src="js/audio.js"></script>

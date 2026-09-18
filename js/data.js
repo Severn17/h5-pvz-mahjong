@@ -15,6 +15,49 @@ const plantGround = r => rowTop(r) + 88
 const zombieGround = r => rowTop(r) + 94
 
 /**
+ * 麻将系统参数（M1 初版数值，可随时调）
+ */
+const MJ = {
+  handSize: 8,          // 手牌上限 = 胡牌张数（2 面子 + 1 雀头 / 4 对）
+  startHand: 7,         // 每关起手张数
+  drawInterval: 2,      // 自动摸牌间隔（秒）
+  skyDrop: 4,           // 天降牌间隔（秒）
+  luckyDrop: 0.8,       // 掉落的牌是"有效牌"（能直接凑成面子）的概率
+  seedSlots: 3,         // 待种植物槽
+  huDamage: 300,        // 胡牌基础伤害 × 番数
+  huBossCap: 0.3,       // 胡牌对僵尸王的伤害上限（最大生命比例）
+  huRedraw: 5,          // 胡牌后重新摸几张
+}
+
+/**
+ * 面子 → 植物
+ * 条=攻击　饼=防御　万=功能　字=爆发
+ * 返回 { plant, hpMul?, dmgMul?, label } 或 { effect, label }（不种植物的即时效果）
+ */
+function meldToSeed (meld) {
+  const { kind, suit, n } = meld
+  if (kind === 'chow') {
+    if (suit === 's') return { plant: n <= 3 ? 'peashooter' : n <= 6 ? ((n + 1) % 2 ? 'snowpea' : 'repeater') : 'gatlingpea' }
+    if (suit === 'p') return { plant: n <= 3 ? 'wallnut' : n <= 6 ? 'spikeweed' : 'potatomine' }
+    if (suit === 'm') return { plant: n <= 3 ? 'sunflower' : n <= 6 ? 'chomper' : 'squash' }
+  }
+  if (kind === 'pung') {
+    if (suit === 's') return { plant: 'threepeater' }
+    if (suit === 'p') return { plant: 'wallnut', hpMul: 2, label: '强化坚果' }
+    if (suit === 'm') return { effect: 'draw2', label: '招财：摸 2 张' }
+    if (n === 1) return { plant: 'cherrybomb' }
+    if (n === 2) return { plant: 'jalapeno' }
+    return { effect: 'freeze', label: '白板：全场减速 5 秒' }
+  }
+  if (kind === 'pair' && suit === 'z') {
+    if (n === 1) return { plant: 'cherrybomb', dmgMul: 0.5, label: '小樱桃' }
+    if (n === 2) return { plant: 'jalapeno', dmgMul: 0.5, label: '小辣椒' }
+    return { effect: 'freezeSmall', label: '白对：全场减速 2 秒' }
+  }
+  return null
+}
+
+/**
  * 植物定义
  * anim: 各动作使用的素材目录；fps: 动画帧率
  * ox/oy: 绘制偏移（以格子中心、地面为锚点）
@@ -22,7 +65,7 @@ const zombieGround = r => rowTop(r) + 94
 const PLANTS = {
   sunflower: {
     name: '向日葵', cost: 50, cd: 4, hp: 300,
-    desc: '每 12 秒产出 25 阳光。',
+    desc: '每 12 秒掉落 1 张麻将牌。',
     anim: { idle: 'plants/sunflower/idle' }, fps: 12,
   },
   peashooter: {
@@ -141,8 +184,8 @@ const MODIFIERS = [
   { id: 'calm', name: '风平浪静', desc: '没有特殊效果。', icon: '🌤️' },
   { id: 'fast', name: '狂奔之夜', desc: '僵尸移动速度 +30%。', icon: '💨', apply: s => { s.zombieSpeed *= 1.3 } },
   { id: 'armored', name: '铁甲军团', desc: '路障与铁桶僵尸大量出现。', icon: '🛡️', apply: s => { s.poolBoost = { cone: 4, bucket: 3 } } },
-  { id: 'cloudy', name: '阴天', desc: '没有天降阳光，但本关开始时获得 150 阳光。', icon: '☁️', apply: s => { s.noSkySun = true; s.bonusSun = 150 } },
-  { id: 'horde', name: '尸潮', desc: '僵尸数量 +50%，每只僵尸额外掉落 10 阳光。', icon: '🧟', apply: s => { s.budgetMul *= 1.5; s.killSun += 10 } },
+  { id: 'cloudy', name: '阴天', desc: '没有天降牌，但起手多摸 1 张。', icon: '☁️', apply: s => { s.noSkySun = true; s.bonusDraw = 1 } },
+  { id: 'horde', name: '尸潮', desc: '僵尸数量 +50%，但摸牌速度 +25%。', icon: '🧟', apply: s => { s.budgetMul *= 1.5; s.drawRate = 1.25 } },
   { id: 'news', name: '号外号外', desc: '读报僵尸大量出现。', icon: '📰', apply: s => { s.poolBoost = { paper: 8 } } },
 ]
 
@@ -154,22 +197,22 @@ const MODIFIERS = [
  */
 const UPGRADES = [
   // —— 经济 ——
-  { id: 'sun_cache', name: '阳光储备', icon: '☀️', rarity: 'common', max: 9, desc: '立即获得 200 阳光。',
-    apply: (m, g) => { g.sun += 200 } },
-  { id: 'photosynth', name: '光合作用', icon: '🌻', rarity: 'common', max: 2, desc: '向日葵产阳光速度 +40%。',
+  { id: 'fast_draw', name: '手气正旺', icon: '🀄', rarity: 'common', max: 3, desc: '自动摸牌速度 +20%。',
+    apply: m => { m.drawRate *= 1.2 } },
+  { id: 'photosynth', name: '光合作用', icon: '🌻', rarity: 'common', max: 2, desc: '向日葵掉牌速度 +40%。',
     apply: m => { m.sunflowerRate *= 1.4 } },
-  { id: 'sky_rain', name: '天降甘霖', icon: '🌦️', rarity: 'common', max: 2, desc: '天降阳光频率 +40%。',
+  { id: 'sky_rain', name: '天降好牌', icon: '🌦️', rarity: 'common', max: 2, desc: '天降牌频率 +40%。',
     apply: m => { m.skySunRate *= 1.4 } },
-  { id: 'twin_sun', name: '双子向日葵', icon: '🌞', rarity: 'rare', desc: '向日葵每次产出 50 阳光。',
-    apply: m => { m.sunflowerAmt = 50 } },
-  { id: 'auto_collect', name: '阳光磁铁', icon: '🧲', rarity: 'common', desc: '阳光会被自动收集。',
+  { id: 'twin_sun', name: '双子向日葵', icon: '🌞', rarity: 'rare', desc: '向日葵每次掉落 2 张牌。',
+    apply: m => { m.sunflowerAmt = 2 } },
+  { id: 'auto_collect', name: '顺手牵羊', icon: '🧲', rarity: 'common', desc: '掉落的牌会被自动收进手牌。',
     apply: m => { m.autoCollect = true } },
-  { id: 'thrifty', name: '精打细算', icon: '💰', rarity: 'rare', max: 2, desc: '所有植物阳光消耗 -15%。',
-    apply: m => { m.costMul *= 0.85 } },
-  { id: 'interest', name: '复利', icon: '🏦', rarity: 'rare', desc: '每关开始时获得当前阳光的 25%（最多 250）。',
-    apply: m => { m.interest = true } },
-  { id: 'bounty', name: '赏金猎人', icon: '🎯', rarity: 'rare', desc: '每消灭一只僵尸获得 10 阳光。',
-    apply: m => { m.killSun += 10 } },
+  { id: 'start_hand', name: '起手好牌', icon: '🎴', rarity: 'rare', max: 2, desc: '每关起手额外多摸 1 张（不超过手牌上限）。',
+    apply: m => { m.startBonus += 1 } },
+  { id: 'big_hu', name: '大胡', icon: '🀅', rarity: 'rare', max: 2, desc: '胡牌伤害 +50%。',
+    apply: m => { m.huDmg *= 1.5 } },
+  { id: 'bounty', name: '赏金猎人', icon: '🎯', rarity: 'rare', desc: '每消灭 4 只僵尸摸 1 张牌。',
+    apply: m => { m.killDraw = true } },
   // —— 射手 ——
   { id: 'hard_pea', name: '硬化豌豆', icon: '🟢', rarity: 'common', max: 3, desc: '豌豆伤害 +25%。',
     apply: m => { m.peaDmg *= 1.25 } },
@@ -201,16 +244,16 @@ const UPGRADES = [
   { id: 'mower_return', name: '回旋除草车', icon: '🔁', rarity: 'legendary', desc: '除草车清场后会开回来，可再次使用。',
     apply: m => { m.mowerReturn = true } },
   // —— 爆炸与特殊 ——
-  { id: 'quick_boom', name: '速爆', icon: '💣', rarity: 'common', max: 2, desc: '樱桃、辣椒、窝瓜、土豆地雷冷却 -40%。',
-    apply: m => { m.explosiveCd *= 0.6 } },
+  { id: 'tenpai_rage', name: '听牌气势', icon: '🔥', rarity: 'rare', desc: '听牌时所有射手攻速 +30%。',
+    apply: m => { m.tenpaiRage = true } },
   { id: 'fast_mine', name: '速成地雷', icon: '🥔', rarity: 'common', desc: '土豆地雷只需 2 秒即可就绪。',
     apply: m => { m.mineArm = 2 } },
   { id: 'big_cherry', name: '巨型樱桃', icon: '🍒', rarity: 'rare', desc: '樱桃炸弹范围扩大到 5×5。',
     apply: m => { m.cherryRange = 2 } },
   { id: 'hungry', name: '饥肠辘辘', icon: '👄', rarity: 'common', desc: '大嘴花消化时间 -70%。',
     apply: m => { m.digest *= 0.3 } },
-  { id: 'cooldown', name: '冷却大师', icon: '⏱️', rarity: 'rare', max: 2, desc: '所有卡片冷却时间 -25%。',
-    apply: m => { m.cardCd *= 0.75 } },
+  { id: 'self_draw', name: '自摸高手', icon: '🙌', rarity: 'rare', desc: '每关第一次胡牌必定算作自摸（×1.5）。',
+    apply: m => { m.freeTsumo = true } },
   { id: 'insurance', name: '末日保险', icon: '📜', rarity: 'legendary', desc: '僵尸首次闯入房子时不会失败，改为消灭全场僵尸。',
     apply: m => { m.insurance += 1 } },
   { id: 'sky_fire', name: '天火', icon: '☄️', rarity: 'legendary', desc: '每当“一大波僵尸”来袭，自动焚烧僵尸最多的两行。',
@@ -226,8 +269,9 @@ const UPGRADES = [
 const baseMods = () => ({
   peaDmg: 1, iceDmg: 1, fireRate: 1, pierce: 0, extraShots: 0, iceChance: 0, slow: 0.5, firePea: false,
   wallnutHp: 1, plantHp: 1, thorns: 0, spikeDmg: 1, spikePierceArmor: false, regen: 0, mowerReturn: false,
-  explosiveCd: 1, mineArm: 6, cherryRange: 1, digest: 1, cardCd: 1, costMul: 1,
-  sunflowerRate: 1, sunflowerAmt: 25, skySunRate: 1, autoCollect: false, interest: false, killSun: 0,
+  mineArm: 6, cherryRange: 1, digest: 1,
+  sunflowerRate: 1, sunflowerAmt: 1, skySunRate: 1, autoCollect: false,
+  drawRate: 1, startBonus: 0, huDmg: 1, killDraw: false, tenpaiRage: false, freeTsumo: false,
   insurance: 0, skyFire: false, zombieSpeed: 1,
 })
 
