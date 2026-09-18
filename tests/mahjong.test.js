@@ -98,3 +98,42 @@ test('牌山：取出指定的牌', () => {
   assert.equal(d.take('z1'), null)
   assert.equal(d.count, 116)
 })
+
+test('牌山：可以只放部分牌种', () => {
+  const kinds = M.KINDS.filter(k => k[0] !== 'm')
+  const d = new M.Deck(M.rng(1), kinds)
+  assert.equal(d.count, 84)
+  assert.equal(d.remaining('m5'), 0)
+  assert.equal(d.remaining('p5'), 4)
+})
+
+test('提示：找出所有面子，并挑出互不重叠的一组', () => {
+  const hand = h('s1 s2 s3 s4 p7 p7 p7 z1')
+  const all = M.meldGroups(hand)
+  // s123、s234、p777（三张相同的 p7 只算一组）
+  assert.deepEqual(all.map(g => g.idx.map(i => hand[i]).join('')), ['s1s2s3', 's2s3s4', 'p7p7p7'])
+  const picked = M.pickGroups(all)
+  assert.equal(picked.length, 2)
+  assert.ok(picked.some(g => g.meld.kind === 'pung'))
+})
+
+test('提示：可以接受字牌对子', () => {
+  const hand = h('z1 z1 s5')
+  const all = M.meldGroups(hand, m => m.kind !== 'kong' && (m.kind !== 'pair' || m.suit === 'z'))
+  assert.deepEqual(all.map(g => g.meld.kind), ['pair'])
+})
+
+test('提示：优先三张的面子而不是对子', () => {
+  const hand = h('z1 z1 z1')
+  const all = M.meldGroups(hand, m => m.kind !== 'kong')
+  const picked = M.pickGroups(all)
+  assert.equal(picked.length, 1)
+  assert.equal(picked[0].meld.kind, 'pung')
+})
+
+test('差一张', () => {
+  const hand = h('s3 s4 p9 z2 z2')
+  assert.deepEqual(M.partialWaits(hand, 0), ['s2', 's5'])
+  assert.deepEqual(M.partialWaits(hand, 3), ['z2'])
+  assert.deepEqual(M.partialWaits(hand, 2), [])
+})

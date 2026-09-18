@@ -55,7 +55,7 @@ const UI = {
     const tip = $('cardTip')
     if (!seed) { tip.classList.add('hidden'); return }
     const d = PLANTS[seed.plant]
-    tip.innerHTML = '<b>' + (seed.label || d.name) + '</b><span>' + seed.tiles.map(Mahjong.name).join(' ') + '</span><p>' + d.desc + '</p>'
+    tip.innerHTML = '<b>' + (seed.label || d.name) + '</b><span>' + (seed.gift ? '开局赠送' : seed.tiles.map(Mahjong.name).join(' ')) + '</span><p>' + d.desc + '</p>'
     tip.style.top = Math.min(SEED_Y + i * SEED_STEP, H - 110) + 'px'
     tip.classList.remove('hidden')
   },
@@ -101,7 +101,7 @@ const UI = {
       return '<li><span>' + u.icon + '</span><b style="color:' + RARITY[u.rarity].color + '">' + u.name + (n > 1 ? ' ×' + n : '') + '</b>' + u.desc + '</li>'
     }).join('') : '<li>还没有任何强化</li>'
     box.innerHTML = '<h2>游戏暂停</h2><h3>已获得的强化</h3><ul>' + list + '</ul>' +
-      '<p class="keys">点牌选中　Q 组合　X 打出（或右键手牌）　H 胡牌　1~3 选待种植物<br>S 铲子　F 加速　M 静音　空格 暂停　Esc 取消</p>' +
+      '<p class="keys">点牌自动选中面子，再点一次组合　Q 组合　X 打出（或右键手牌）　H 胡牌　T 面子提示开关　1~3 选待种植物<br>S 铲子　F 加速　M 静音　空格 暂停　Esc 取消</p>' +
       '<div class="btns"><button id="resumeBtn">继续游戏</button><button id="quitBtn" class="ghost">放弃本局</button></div>'
     $('resumeBtn').onclick = () => G.togglePause()
     $('quitBtn').onclick = () => { G.state = 'title'; Sound.stopMusic(); this.showTitle() }

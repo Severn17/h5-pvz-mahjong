@@ -38,12 +38,13 @@ const Mahjong = (() => {
 
   /**
    * 牌山：每种 4 张，洗牌后从尾部摸牌
+   * kinds：可选，只放入这些牌种（例如第 1 关不放萬）
    */
   class Deck {
-    constructor (random = Math.random) {
+    constructor (random = Math.random, kinds = KINDS) {
       this.random = random
       this.tiles = []
-      for (const k of KINDS) for (let i = 0; i < 4; i++) this.tiles.push(k)
+      for (const k of kinds) for (let i = 0; i < 4; i++) this.tiles.push(k)
       this.shuffle()
     }
     shuffle () {
@@ -142,6 +143,63 @@ const Mahjong = (() => {
     })
   }
 
+  /**
+   * 手牌里所有能组成的面子（按下标），accept(meld) 决定哪些算数
+   * 同样牌面的组合只保留一个
+   */
+  function meldGroups (hand, accept = m => m.kind === 'chow' || m.kind === 'pung') {
+    const res = [], seen = new Set()
+    const add = idx => {
+      const tiles = idx.map(i => hand[i])
+      const m = classifyMeld(tiles)
+      if (!m || !accept(m)) return
+      const key = sort(tiles).join()
+      if (seen.has(key)) return
+      seen.add(key)
+      res.push({ idx, meld: m })
+    }
+    const n = hand.length
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+      for (let k = j + 1; k < n; k++) add([i, j, k])
+      add([i, j])
+    }
+    return res
+  }
+
+  // 挑出互不重叠的面子，三张的面子优先、数量尽量多
+  function pickGroups (groups) {
+    let best = [], bestScore = -1
+    const score = gs => gs.reduce((a, g) => a + (g.idx.length === 3 ? 10 : 1), 0)
+    const walk = (start, used, chosen) => {
+      const s = score(chosen)
+      if (s > bestScore) { bestScore = s; best = chosen.slice() }
+      for (let i = start; i < groups.length; i++) {
+        const g = groups[i]
+        if (g.idx.some(k => used.has(k))) continue
+        g.idx.forEach(k => used.add(k))
+        chosen.push(g)
+        walk(i + 1, used, chosen)
+        chosen.pop()
+        g.idx.forEach(k => used.delete(k))
+      }
+    }
+    walk(0, new Set(), [])
+    return best
+  }
+
+  // 差一张：第 i 张牌和手里另一张牌，再来哪张就能组成顺子或刻子
+  function partialWaits (hand, i) {
+    const res = new Set()
+    hand.forEach((t, j) => {
+      if (j === i) return
+      for (const k of KINDS) {
+        const m = classifyMeld([hand[i], t, k])
+        if (m && (m.kind === 'chow' || m.kind === 'pung')) res.add(k)
+      }
+    })
+    return sort([...res])
+  }
+
   // 七对子（简化版：handSize/2 个互不相同的对子）
   function isPairs (hand) {
     if (hand.length < 4 || hand.length % 2) return false
@@ -201,7 +259,7 @@ const Mahjong = (() => {
     return { mul: best.mul, names: ids.map(id => FAN[id].name) }
   }
 
-  return { SUITS, HONORS, KINDS, FAN, FAN_CAP, Deck, rng, suit, num, isHonor, name, cmp, sort, classifyMeld, usefulTiles, decompose, isPairs, isHu, waits, calcFan }
+  return { SUITS, HONORS, KINDS, FAN, FAN_CAP, Deck, rng, suit, num, isHonor, name, cmp, sort, classifyMeld, usefulTiles, meldGroups, pickGroups, partialWaits, decompose, isPairs, isHu, waits, calcFan }
 })()
 
 if (typeof module !== 'undefined') module.exports = Mahjong

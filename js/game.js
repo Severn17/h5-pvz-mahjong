@@ -14,6 +14,8 @@ class Game {
     // ?seed=123 可固定牌山，方便复现
     const q = new URLSearchParams(location.search).get('seed')
     this.fixedSeed = q ? +q : null
+    // 面子提示（T 键开关，记在本地）
+    try { this.hintsOn = localStorage.getItem('mj.hints') !== 'off' } catch (e) { this.hintsOn = true }
     this.shake = 0
     this.last = 0
     this.reset()
@@ -28,6 +30,8 @@ class Game {
     this.river = []                  // 弃牌/用掉的牌，牌山摸空时洗回
     this.seeds = []                  // 待种植物 [{ plant, hpMul, dmgMul, label, tiles }]
     this.waits = []
+    this.hintGroups = []             // 提示用：互不重叠的面子
+    this.allGroups = []              // 手牌中所有面子
     this.canHu = false
     this.tenpai = false
     this.pendingDrops = 0            // 正在飞向手牌的牌
@@ -76,9 +80,11 @@ class Game {
     else if (i === 0) mod = MODIFIERS[0]
     else mod = MODIFIERS[1 + Math.floor(Math.random() * (MODIFIERS.length - 1))]
     if (mod.apply) mod.apply(s)
+    if (i === 1 && STAGES[0].suits) mod = Object.assign({}, mod, { desc: mod.desc + '　🀄 萬字牌加入牌山！' })
     this.modifier = mod
     this.stageHuCount = 0
     this.newHand()
+    for (const plant of MJ.startSeeds) if (this.seeds.length < MJ.seedSlots) this.seeds.push({ plant, tiles: [], gift: true })
     this.buildSpawns(cfg)
     this.state = 'playing'
     UI.hideAll()
@@ -205,7 +211,9 @@ class Game {
 
   // ———————————————— 麻将手牌 ————————————————
   newHand () {
-    this.deck = new Mahjong.Deck(this.random)
+    const suits = STAGES[this.stageIndex].suits
+    this.stageKinds = suits ? Mahjong.KINDS.filter(k => suits.includes(Mahjong.suit(k))) : Mahjong.KINDS
+    this.deck = new Mahjong.Deck(this.random, this.stageKinds)
     this.hand = []
     this.river = []
     this.drops = []
@@ -246,7 +254,9 @@ class Game {
     const tiles = this.hand.map(h => h.t)
     const wasTenpai = this.tenpai
     this.canHu = Mahjong.isHu(tiles, MJ.handSize)
-    this.waits = this.canHu ? [] : Mahjong.waits(tiles, MJ.handSize)
+    this.waits = this.canHu ? [] : Mahjong.waits(tiles, MJ.handSize).filter(t => this.stageKinds.includes(t))
+    this.allGroups = Mahjong.meldGroups(tiles, m => !!meldToSeed(m))
+    this.hintGroups = Mahjong.pickGroups(this.allGroups)
     this.tenpai = this.canHu || this.waits.length > 0
     if (this.canHu && this.huReadyAt < 0) {
       this.huReadyAt = this.stageT
@@ -260,11 +270,31 @@ class Game {
     if (this.tenpai !== wasTenpai) Sound.setMusicMode(this.tenpai || this.waveAnnounced ? 'tense' : 'calm')
   }
   selectedTiles () { return this.hand.filter(h => h.sel) }
+  toggleHints () {
+    this.hintsOn = !this.hintsOn
+    try { localStorage.setItem('mj.hints', this.hintsOn ? 'on' : 'off') } catch (e) {}
+    this.floatText('面子提示：' + (this.hintsOn ? '开' : '关'), HAND_X + 180, HAND_Y - 58, '#fff')
+    Sound.play('select')
+  }
   clearTileSel () { for (const h of this.hand) h.sel = false }
   toggleTile (i) {
     const h = this.hand[i]
     if (!h) return
-    if (!h.sel && this.selectedTiles().length >= 3) {
+    const sel = this.selectedTiles()
+    // 已选中一组有效面子时，再点其中一张 = 组合
+    if (h.sel && sel.length >= 2 && this.meldPreview()) return this.combine()
+    // 没有选中任何牌时，点一张牌自动选中它所在的面子
+    if (!sel.length && this.hintsOn) {
+      const g = this.hintGroups.find(g => g.idx.includes(i)) || this.allGroups.find(g => g.idx.includes(i))
+      if (g) {
+        for (const k of g.idx) this.hand[k].sel = true
+        this.selected = null
+        this.selectedSeed = -1
+        Sound.play('select')
+        return
+      }
+    }
+    if (!h.sel && sel.length >= 3) {
       this.deny('最多选 3 张')
       return
     }
@@ -520,6 +550,7 @@ class Game {
     if (k === 'q' || k === 'enter') this.combine()
     if (k === 'x' || k === 'delete' || k === 'backspace') this.discard()
     if (k === 'h') this.declareHu()
+    if (k === 't') this.toggleHints()
     const n = '123'.indexOf(e.key)
     if (n >= 0) this.selectSeed(n)
   }
@@ -604,6 +635,10 @@ class Game {
       }
       x.drawImage(CARD_IMAGES[seed.plant], 2, y)
       seed.tiles.forEach((t, k) => drawTile(x, t, 61 + k * 13, y + 8, 13, 18))
+      if (seed.gift) {
+        x.font = 'bold 13px sans-serif'; x.fillStyle = '#b3261e'
+        x.fillText('赠送', 80, y + 27)
+      }
       if (seed.hpMul || seed.dmgMul) {
         x.font = 'bold 11px sans-serif'; x.fillStyle = '#7a2a00'
         x.fillText(seed.hpMul ? '血×2' : '威力½', 80, y + 39)
@@ -685,6 +720,11 @@ class Game {
     const sx = this.handShake > 0 ? Math.sin(this.handShake * 60) * 4 * (this.handShake / 0.3) : 0
     const hover = this.handAt(this.mouse.x, this.mouse.y)
     const waitSet = this.canHu ? null : this.tenpai
+    const sel = this.selectedTiles()
+    // 面子提示：每组面子一种颜色
+    const hints = this.hintsOn && !sel.length && !this.canHu ? this.hintGroups : []
+    const colorOf = {}
+    hints.forEach((g, n) => g.idx.forEach(k => { colorOf[k] = HINT_COLORS[n % HINT_COLORS.length] }))
     for (let i = 0; i < MJ.handSize; i++) {
       const l = HAND_X + i * HAND_STEP
       if (i >= this.hand.length) {
@@ -703,14 +743,34 @@ class Game {
       if (h.sel) {
         x.lineWidth = 3; x.strokeStyle = '#ffe14d'
         roundRect(x, l, top, TILE_W, TILE_H, 6); x.stroke()
+      } else if (colorOf[i]) {
+        x.lineWidth = 3; x.strokeStyle = colorOf[i]
+        roundRect(x, l + 1, top + 1, TILE_W - 2, TILE_H - 2, 6); x.stroke()
       }
       x.restore()
     }
+    // 提示标签：面子能种出什么
+    x.font = 'bold 13px sans-serif'
+    const pill = (text, l, color) => {
+      const w = x.measureText(text).width + 14
+      x.fillStyle = color
+      roundRect(x, l, HAND_Y - 26, w, 20, 10); x.fill()
+      x.fillStyle = '#fff'
+      x.fillText(text, l + 7, HAND_Y - 11)
+    }
+    hints.forEach((g, n) => {
+      const seed = meldToSeed(g.meld)
+      pill(seed.label || PLANTS[seed.plant].name, HAND_X + g.idx[0] * HAND_STEP, HINT_COLORS[n % HINT_COLORS.length])
+    })
+    // 悬停在不成面子的牌上：提示差哪一张
+    if (this.hintsOn && !sel.length && hover >= 0 && !(hover in colorOf) && !this.canHu) {
+      const need = Mahjong.partialWaits(this.hand.map(h => h.t), hover).filter(t => this.deck.remaining(t) > 0)
+      if (need.length) pill('差一张：' + need.slice(0, 4).map(Mahjong.name).join(' / '), HAND_X + hover * HAND_STEP, 'rgba(60,60,60,0.9)')
+    }
     // 选中牌的组合预览
-    const sel = this.selectedTiles()
     if (sel.length >= 2) {
       const seed = this.meldPreview()
-      const text = seed ? '→ ' + (seed.label || PLANTS[seed.plant].name) + '（Q）' : '✗ 不成面子'
+      const text = seed ? '→ ' + (seed.label || PLANTS[seed.plant].name) + '（再点一次 / Q）' : '✗ 不成面子'
       x.font = 'bold 15px sans-serif'
       const w = x.measureText(text).width + 16
       const l = HAND_X + this.hand.indexOf(sel[0]) * HAND_STEP

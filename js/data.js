@@ -23,11 +23,12 @@ const MJ = {
   startHand: 7,         // 每关起手张数
   drawInterval: 2,      // 自动摸牌间隔（秒）
   skyDrop: 4,           // 天降牌间隔（秒）
-  luckyDrop: 0.8,       // 掉落的牌是"有效牌"（能直接凑成面子）的概率
+  luckyDrop: 0.5,       // 掉落的牌是"有效牌"（能直接凑成面子）的概率
   seedSlots: 3,         // 待种植物槽
   huDamage: 300,        // 胡牌基础伤害 × 番数
   huBossCap: 0.3,       // 胡牌对僵尸王的伤害上限（最大生命比例）
   huRedraw: 5,          // 胡牌后重新摸几张
+  startSeeds: ['sunflower', 'peashooter'],   // 每关开局赠送的待种植物
 }
 
 /**
@@ -172,7 +173,7 @@ const ZOMBIE_COMMON = {
  * budget: 本关僵尸预算；pool: 可出现的僵尸及权重；spawnTime: 零散刷怪持续时间（秒）
  */
 const STAGES = [
-  { budget: 5, spawnTime: 14, pool: { normal: 1 } },
+  { budget: 5, spawnTime: 14, pool: { normal: 1 }, suits: ['p', 's', 'z'] },   // 第 1 关不放萬，更容易凑面子
   { budget: 13, spawnTime: 17, pool: { normal: 5, cone: 3, paper: 2 } },
   { budget: 22, spawnTime: 20, pool: { normal: 4, cone: 3, paper: 2, bucket: 1 } },
   { budget: 14, spawnTime: 18, pool: { normal: 3, cone: 3, paper: 2, bucket: 2 }, boss: true },

@@ -120,6 +120,7 @@ const TILE_W = 56, TILE_H = 76                  // 手牌尺寸（底部托盘�
 const DROP_W = 40, DROP_H = 54                  // 草坪上掉落的牌
 const HAND_X = 272, HAND_Y = 616, HAND_STEP = 60 // 手牌区位置：底部居中
 const SEED_Y = 26, SEED_STEP = 48               // 左侧待种植物槽
+const HINT_COLORS = ['#38b6ff', '#ff7a45', '#c56cf0']   // 面子提示的分组颜色
 const PANEL_BUTTONS = [
   { action: 'combine', label: '组合', key: 'Q', x: 768, y: 612, w: 92, h: 38, color: '#3f8f2f' },
   { action: 'discard', label: '打出', key: 'X', x: 768, y: 654, w: 92, h: 38, color: '#8a5a2b' },
