@@ -1,532 +1,532 @@
-/* by：弦云孤赫——David Yang
-** github - https://github.com/yangyunhe369
-*/
 /**
- * 游戏引擎函数
+ * 游戏主体：主循环、关卡流程、输入、绘制
  */
 class Game {
   constructor () {
-    let g = {
-      actions: {},                                                  // 注册按键操作
-      keydowns: {},                                                 // 按键事件对象
-      cardSunVal: null,                                             // 当前选中植物卡片index以及需消耗阳光值
-      cardSection: '',                                              // 绘制随鼠标移动植物类别
-      canDrawMousePlant: false,                                     // 能否绘制随鼠标移动植物
-      canLayUp: false,                                              // 能否放置植物
-      mousePlant: null,                                             // 鼠标绘制植物对象
-      mouseX: 0,                                                    // 鼠标 x 轴坐标
-      mouseY: 0,                                                    // 鼠标 y 轴坐标
-      mouseRow: 0,                                                  // 鼠标移动至可种植植物区域的行坐标
-      mouseCol: 0,                                                  // 鼠标移动至可种植植物区域的列坐标
-      state: 0,                                                     // 游戏状态值，初始默认为 0
-      state_LOADING: 0,                                             // 准备阶段
-      state_START: 1,                                               // 开始游戏
-      state_RUNNING: 2,                                             // 游戏开始运行
-      state_STOP: 3,                                                // 暂停游戏
-      state_PLANTWON: 4,                                            // 游戏结束，玩家胜利
-      state_ZOMBIEWON: 5,                                           // 游戏结束，僵尸胜利
-      canvas: document.getElementById("canvas"),                    // canvas元素
-      context: document.getElementById("canvas").getContext("2d"),  // canvas画布
-      timer: null,                                                  // 轮询定时器
-      fps: window._main.fps,                                        // 动画帧数
-    }
-    Object.assign(this, g)
+    this.canvas = document.getElementById('canvas')
+    this.ctx = this.canvas.getContext('2d')
+    this.state = 'loading'           // loading / title / playing / draft / paused / over / victory
+    this.speed = 1
+    this.mouse = { x: -100, y: -100 }
+    this.hoverCard = -1
+    this.selected = null             // 选中的植物类型或 'shovel'
+    this.shake = 0
+    this.last = 0
+    this.reset()
   }
-  // 创建，并初始化当前对象
-  static new () {
-    let g = new this()
-    g.init()
-    return g
+  reset () {
+    this.mods = baseMods()
+    this.stageMods = { zombieSpeed: 1 }
+    this.sun = 200
+    this.plants = []
+    this.zombies = []
+    this.peas = []
+    this.suns = []
+    this.effects = []
+    this.particles = []
+    this.hitstop = 0              // 命中顿帧剩余时间
+    this.screenFlash = null       // 全屏闪光 { color, t }
+    this.vignette = 0             // 红色警告边框剩余时间
+    this.mowers = []
+    for (let r = 0; r < ROWS; r++) this.mowers.push(new Mower(r))
+    this.cards = PLANT_ORDER.map(type => ({ type, cd: 0, cdMax: 1 }))
+    this.owned = []                  // 已获得强化 id 列表
+    this.stageIndex = -1
+    this.kills = 0
+    this.runTime = 0
+    this.rerolls = 2
+    this.selected = null
   }
-  // 清除当前游戏定时器
-  clearGameTimer () {
-    let g = this
-    clearInterval(g.timer)
-  }
-  // 绘制场景
-  drawBg () {
-    let g = this,
-        cxt = g.context,
-        sunnum = window._main.sunnum,               // 阳光数量对象
-        cards = window._main.cards,                 // 植物卡片对象
-        img = imageFromPath(allImg.bg)              // 背景图片对象
-    // 绘制背景
-    cxt.drawImage(img, 0, 0)
-    // 绘制阳光数量框
-    sunnum.draw(cxt)
-  }
-  // 绘制小汽车
-  drawCars () {
-    let g = this,
-        cxt = g.context,
-        cars = window._main.cars                    // 小汽车对象
-    // 绘制植物卡片
-    cars.forEach(function (car, idx) {
-      if (car.x > 950) { // 移除使用过的小汽车
-        cars.splice(idx, 1)
-      }
-      car.draw(g, cxt)
-    })
-  }
-  // 绘制植物卡片
-  drawCards () {
-    let g = this,
-        cxt = g.context,
-        cards = window._main.cards                  // 植物卡片对象
-    // 绘制植物卡片
-    for (let card of cards) {
-      card.draw(cxt)
-    }
-  }
-  // 绘制玩家胜利动画
-  drawPlantWon () {
-    let g = this,
-        cxt = g.context, 
-        text = '恭喜玩家获得胜利！'          // 胜利文案
-    // 绘制胜利动画
-    cxt.fillStyle = 'red'
-    cxt.font = '48px Microsoft YaHei'
-    cxt.fillText(text, 354, 300)
-  }
-  // 绘制僵尸胜利动画
-  drawZombieWon () {
-    let g = this,
-        cxt = g.context, 
-        img = imageFromPath(allImg.zombieWon)          // 胜利图片对象
-    // 绘制胜利动画
-    cxt.drawImage(img, 293, 66)
-  }
-  // 绘制loading首屏画面
-  drawLoading () {
-    let g = this,
-        cxt = g.context,
-        img = imageFromPath(allImg.startBg)
-    // 绘制loading图片
-    cxt.drawImage(img, 119, 0)
-  }
-  // 绘制Start动画
-  drawStartAnime () {
-    let g = this,
-        stateName = 'write',
-        loading = window._main.loading,
-        cxt = g.context,
-        canvas_w = g.canvas.width,
-        canvas_h = g.canvas.height,
-        animateLen = allImg.loading[stateName].len     // 修改当前动画序列长度
-    // 累加动画计数器
-    if (loading.imgIdx !== animateLen) {
-      loading.count += 1
-    }
-    // 设置角色动画运行速度
-    loading.imgIdx = Math.floor(loading.count / loading.fps)
-    // 一整套动画完成后重置动画计数器，并设置当前帧动画对象
-    if (loading.imgIdx === animateLen) {
-      loading.img = loading.images[loading.imgIdx - 1]
-    } else {
-      loading.img = loading.images[loading.imgIdx]
-    }
-    // 绘制Start动画
-    cxt.drawImage(loading.img, 437, 246)
-  }
-  // 绘制所有子弹的函数
-  drawBullets (plants) {
-    let g = this,
-        context = g.context,
-        canvas_w = g.canvas.width - 440
-    for (let item of plants) {
-      item.bullets.forEach(function (bullet, idx, arr) {
-        // 绘制子弹
-        bullet.draw(g, context)
-        // 移除超出射程的子弹
-        if (bullet.x >= canvas_w) {
-          arr.splice(idx, 1)
-        }
-      })
-    }
-  }
-  // 绘制角色血量
-  drawBlood (role) {
-    let g = this,
-        cxt = g.context,
-        x = role.x,
-        y = role.y
-    cxt.fillStyle = 'red'
-    cxt.font = '18px Microsoft YaHei'
-    if (role.type === 'plant') {
-      cxt.fillText(role.life, x + 30, y - 10)
-    } else if (role.type === 'zombie') {
-      cxt.fillText(role.life, x + 85, y + 10)
-    }
-  }
-  // 更新角色状态
-  updateImage (plants, zombies) {
-    let g = this,
-        cxt = g.context
-    plants.forEach(function (plant, idx) {
-      // 判断是否进入攻击状态
-      plant.canAttack()
-      // 更新状态
-      plant.update(g)
-    })
-    zombies.forEach(function (zombie, idx) {
-      if (zombie.x < 50) { // 僵尸到达房屋，获得胜利
-        g.state = g.state_ZOMBIEWON
-      }
-      // 判断是否进入攻击状态
-      zombie.canAttack()
-      // 更新状态
-      zombie.update(g)
-    })
-  }
-  // 绘制角色
-  drawImage (plants, zombies) {
-    let g = this,
-        cxt = g.context,
-        delPlantsArr = []             // 被删除植物元素集合
-    plants.forEach(function (plant, idx, arr) {
-      if (plant.isDel) { // 移除死亡对象
-        delPlantsArr.push(plant)
-        arr.splice(idx, 1)
-      } else { // 绘制未死亡角色
-        plant.draw(cxt)
-        // g.drawBlood(plant)
-      }
-    })
-    zombies.forEach(function (zombie, idx) {
-      if (zombie.isDel) { // 移除死亡对象
-        zombies.splice(idx, 1)
-        // 当僵尸被消灭完，玩家获得胜利
-        if (zombies.length === 0) {
-          g.state = g.state_PLANTWON
-        }
-      } else { // 绘制未死亡角色
-        zombie.draw(cxt)
-        // g.drawBlood(zombie)
-      }
-      // 使僵尸在植物死亡后可正确移动
-      for (let plant of delPlantsArr) {
-        if (zombie.attackPlantID === plant.id) {
-          zombie.canMove = true
-          if (zombie.life > 2) {
-            zombie.changeAnimation('run')
-          }
-        }
-      }
-    })
-  }
-  // 检测当前鼠标移动坐标，并处理相关事件
-  getMousePos () {
-    let g = this,
-        _main = window._main,
-        cxt = g.context,
-        cards = _main.cards,
-        x = g.mouseX,
-        y = g.mouseY
-    // 鼠标移动绘制植物
-    if (g.canDrawMousePlant) {
-      g.mousePlantCallback(x, y)
-    }
-  }
-  // 鼠标移动绘制植物
-  mousePlantCallback (x, y) {
-    let g = this,
-        _main = window._main,
-        cxt = g.context,
-        row = Math.floor((y - 75) / 100) + 1,               // 定义行坐标
-        col = Math.floor((x - 175) / 80) + 1                // 定义列坐标
-    // 绘制植物信息
-    let plant_info = {
-          type: 'plant',
-          section: g.cardSection,
-          x: _main.plants_info.x + 80 * (col - 1),
-          y: _main.plants_info.y + 100 * (row - 1),
-          row: row,
-          col: col,
-        }
-    g.mouseRow = row
-    g.mouseCol = col
-    // 判断是否在可种植区域
-    if (row >= 1 && row <= 5 && col >= 1 && col <= 9) {
-      g.canLayUp = true
-      // 判断当前位置是否可放置植物
-      for (let plant of _main.plants) {
-        if (row === plant.row && col === plant.col) {
-          g.canLayUp = false
-        }
-      }
-    } else {
-      g.canLayUp = false
-    }
-    // 绘制随鼠标移动植物函数
-    if (g.canDrawMousePlant) {
-      g.drawMousePlant(plant_info)
-    }
-  }
-  // 绘制随鼠标移动植物
-  drawMousePlant (plant_info) {
-    let g = this,
-        cxt = g.context,
-        plant = null,
-        mousePlant_info = {       // 随鼠标移动植物信息
-          type: 'plant',
-          section: g.cardSection,
-          x: g.mouseX + 82,
-          y: g.mouseY - 40,
-          row: g.mouseRow,
-          col: g.mouseCol,
-        }
-    // 判断是否允许放置
-    if (g.canLayUp) {
-      // 绘制半透明植物
-      plant = Plant.new(plant_info)
-      plant.isHurt = true
-      plant.update(g)
-      plant.draw(cxt)
-    }
-    // 绘制随鼠标移动植物
-    g.mousePlant = Plant.new(mousePlant_info)
-    g.mousePlant.update(g)
-    g.mousePlant.draw(cxt)
-  }
-  // 注册事件
-  registerAction (key, callback) {
-    this.actions[key] = callback
-  }
-  // 设置逐帧动画
-  setTimer (_main) {
-    let g = this,
-        plants = _main.plants,             // 植物对象数组
-        zombies = _main.zombies            // 僵尸对象数组
-    // 事件集合
-    let actions = Object.keys(g.actions)
-    for (let i = 0; i < actions.length; i++) {
-      let key = actions[i]
-      if(g.keydowns[key]) {
-        // 如果按键被按下，调用注册的action
-        g.actions[key]()
-      }
-    }
-    // 清除画布
-    g.context.clearRect(0, 0, g.canvas.width, g.canvas.height)
-    if (g.state === g.state_LOADING) {
-      // 绘制场景
-      g.drawLoading()
-    } else if (g.state === g.state_START) {
-      // 绘制场景
-      g.drawBg()
-      // 绘制小汽车
-      g.drawCars()
-      // 绘制植物卡片
-      g.drawCards()
-      // 绘制 Start 动画
-      g.drawStartAnime()
-    } else if (g.state === g.state_RUNNING) {
-      // 绘制场景
-      g.drawBg()
-      // 更新所有植物，僵尸状态
-      g.updateImage(plants, zombies)
-      // 绘制所有植物，僵尸
-      g.drawImage(plants, zombies)
-      // 绘制小汽车
-      g.drawCars()
-      // 绘制植物卡片
-      g.drawCards()
-      // 绘制所有子弹
-      g.drawBullets(plants)
-      // 绘制随鼠标移动植物
-      g.getMousePos()
-    } else if (g.state === g.state_STOP) {
-      // 绘制场景
-      g.drawBg()
-      // 更新所有植物，僵尸状态
-      g.updateImage(plants, zombies)
-      // 绘制所有植物，僵尸
-      g.drawImage(plants, zombies)
-      // 绘制小汽车
-      g.drawCars()
-      // 绘制植物卡片
-      g.drawCards()
-      // 绘制所有子弹
-      g.drawBullets(plants)
-      // 清除全局生成阳光定时器
-      _main.clearTiemr()
-    } else if (g.state === g.state_PLANTWON) { // 玩家胜利
-      // 绘制场景
-      g.drawBg()
-      // 绘制小汽车
-      g.drawCars()
-      // 绘制植物卡片
-      g.drawCards()
-      // 绘制玩家胜利画面
-      g.drawPlantWon()
-      // 清除全局生成阳光定时器
-      _main.clearTiemr()
-    } else if (g.state === g.state_ZOMBIEWON) { // 僵尸胜利
-      // 绘制场景
-      g.drawBg()
-      // 绘制小汽车
-      g.drawCars()
-      // 绘制植物卡片
-      g.drawCards()
-      // 绘制僵尸胜利画面
-      g.drawZombieWon()
-      // 清除全局生成阳光定时器
-      _main.clearTiemr()
-    }
-  }
-  /**
-   * 初始化函数
-   * _main: 游戏入口函数对象
-   */
-  init () {
-    let g = this,
-        _main = window._main
 
-    // 设置键盘按下及松开相关注册函数
-    window.addEventListener('keydown', function (event) {
-      g.keydowns[event.keyCode] = 'down'
-    })
-    window.addEventListener('keyup', function (event) {
-      g.keydowns[event.keyCode] = 'up'
-    })
-    g.registerAction = function (key, callback) {
-      g.actions[key] = callback
+  // ———————————————— 流程 ————————————————
+  startRun () {
+    this.reset()
+    UI.hideAll()
+    UI.showHud(true)
+    this.state = 'draft'
+    UI.showDraft('选择一项开局祝福', this.rollUpgrades(0), () => this.startStage(0))
+  }
+  startStage (i) {
+    const cfg = STAGES[i]
+    this.stageIndex = i
+    this.stageT = 0
+    this.skySunT = 2
+    // 关卡特性
+    const s = this.stageMods = { zombieSpeed: 1, budgetMul: 1, killSun: 0, noSkySun: false, bonusSun: 0, poolBoost: null }
+    let mod
+    if (cfg.boss) mod = { id: 'boss', name: '僵尸王来袭', desc: '击败铁桶僵尸王即可获胜！', icon: '👑' }
+    else if (i === 0) mod = MODIFIERS[0]
+    else mod = MODIFIERS[1 + Math.floor(Math.random() * (MODIFIERS.length - 1))]
+    if (mod.apply) mod.apply(s)
+    this.modifier = mod
+    // 关卡开始奖励
+    if (this.mods.interest && i > 0) {
+      const bonus = Math.min(250, Math.floor(this.sun * 0.25))
+      this.sun += bonus
+      this.floatText('复利 +' + bonus, 170, 70, '#ffe066')
     }
-    // 设置轮询定时器
-    g.timer = setInterval(function () {
-      g.setTimer(_main)
-    }, 1000/g.fps)
-    // 注册鼠标移动事件
-    document.getElementById('canvas').onmousemove = function (event) {
-      let e = event || window.event,
-          scrollX = document.documentElement.scrollLeft || document.body.scrollLeft,
-          scrollY = document.documentElement.scrollTop || document.body.scrollTop,
-          x = e.pageX || e.clientX + scrollX,
-          y = e.pageY || e.clientY + scrollY
-      // 设置当前鼠标坐标位置
-      g.mouseX = x
-      g.mouseY = y
+    this.sun += s.bonusSun
+    for (const c of this.cards) c.cd = 0
+    this.buildSpawns(cfg)
+    this.state = 'playing'
+    UI.hideAll()
+    UI.updateStage()
+    UI.banner('第 ' + (i + 1) + ' 关　' + mod.icon + ' ' + mod.name, 2.8, mod.desc)
+    Sound.play('stageStart')
+    Sound.startMusic(cfg.boss ? 'tense' : 'calm')
+    Sound.setMusicMode(cfg.boss ? 'tense' : 'calm')
+  }
+  // 生成本关僵尸出场表
+  buildSpawns (cfg) {
+    const s = this.stageMods
+    const pool = Object.assign({}, cfg.pool)
+    if (s.poolBoost) for (const k in s.poolBoost) pool[k] = (pool[k] || 0) + s.poolBoost[k]
+    const pick = () => {
+      const total = Object.values(pool).reduce((a, b) => a + b, 0)
+      let r = Math.random() * total
+      for (const k in pool) { if ((r -= pool[k]) < 0) return k }
+      return 'normal'
     }
-    // 查看更新日志按钮点击事件
-    document.querySelectorAll('.change-log-btn').forEach(function (el, idx) {
-      el.onclick = function () {
-        let updateLog = document.getElementsByClassName('update-log')[0]
-        updateLog.style.display === 'none' ? updateLog.style.display = 'block' : updateLog.style.display = 'none'
-      }
-    })
-    // 开始游戏按钮点击事件
-    document.getElementById('js-startGame-btn').onclick = function () {
-      // 播放Start动画
-      g.state = g.state_START
-      // 设置定时器，切换至开始游戏状态
-      setTimeout(function () {
-        g.state = g.state_RUNNING
-        // 显示控制按钮
-        document.getElementById('pauseGame').className += ' show'
-        document.getElementById('restartGame').className += ' show'
-        // 设置全局生成阳光、僵尸定时器
-        _main.clearTiemr()
-        _main.setTimer()
-      }, 2500)
-      // 显示卡片列表信息
-      document.getElementsByClassName('cards-list')[0].className += ' show'
-      // 显示控制按钮菜单
-      document.getElementsByClassName('menu-box')[0].className += ' show'
-      // 隐藏开始游戏按钮，游戏介绍，查看更新日志按钮
-      document.getElementById('js-startGame-btn').style.display = 'none'
-      document.getElementById('js-intro-game').style.display = 'none'
-      document.getElementById('js-log-btn').style.display = 'none'
+    const budget = cfg.budget * s.budgetMul
+    const list = []
+    // 零散刷怪：前期稀疏、后期密集
+    let spent = 0
+    const trickle = []
+    while (spent < budget * 0.62) {
+      const t = pick()
+      trickle.push(t)
+      spent += ZOMBIES[t].cost
     }
-    // 植物卡片点击事件
-    document.querySelectorAll('.cards-item').forEach(function (card, idx) {
-      card.onclick = function () {
-        let plant = null,                                 // 鼠标放置植物对象
-            cards = _main.cards
-        // 当卡片可点击时
-        if (cards[idx].canClick) {
-          // 设置当前随鼠标移动植物类别
-          g.cardSection = this.dataset.section
-          // 可绘制随鼠标移动植物
-          g.canDrawMousePlant = true
-          // 设置当前选中植物卡片idx以及需消耗阳光数量
-          g.cardSunVal = {
-            idx: idx,
-            val: cards[idx].sun_val,
-          }
-        }
-      }
+    trickle.forEach((type, k) => {
+      const u = (k + 1) / trickle.length
+      list.push({ t: 5 + (cfg.spawnTime - 5) * Math.pow(u, 0.75), type })
     })
-    // 鼠标点击画布事件
-    document.getElementById('canvas').onclick = function (event) {
-      let plant = null,                                 // 鼠标放置植物对象
-          cards = _main.cards,
-          x = g.mouseX,
-          y = g.mouseY,
-          plant_info = {                                // 鼠标放置植物对象初始化信息
-            type: 'plant',
-            section: g.cardSection,
-            x: _main.plants_info.x + 80 * (g.mouseCol - 1),
-            y: _main.plants_info.y + 100 * (g.mouseRow - 1),
-            row: g.mouseRow,
-            col: g.mouseCol,
-            canSetTimer: g.cardSection === 'sunflower' ? true : false,      // 能否设置阳光生成定时器
-          }
-      // 判断当前位置是否可放置植物
-      for (let item of _main.plants) {
-        if (g.mouseRow === item.row && g.mouseCol === item.col) {
-          g.canLayUp = false
-          g.mousePlant = null
-        }
+    // 一大波僵尸：旗帜僵尸领头
+    const waveT = cfg.spawnTime + 3
+    list.push({ t: waveT, type: 'flag', wave: true })
+    let wave = 0, n = 0
+    while (wave < budget * 0.38) {
+      const t = pick()
+      list.push({ t: waveT + 0.6 + n * 0.35, type: t })
+      wave += ZOMBIES[t].cost
+      n++
+    }
+    if (cfg.boss) list.push({ t: 4, type: 'boss', row: 2 })
+    list.sort((a, b) => a.t - b.t)
+    list.forEach(e => { if (e.row === undefined) e.row = Math.floor(Math.random() * ROWS) })
+    this.spawns = list
+    this.spawnTotal = list.length
+    this.waveT = waveT
+    this.waveAnnounced = false
+    this.skyFireAt = 0
+  }
+  spawnZombie (type, row, x) {
+    const z = new Zombie(type, row)
+    if (x) z.x = x
+    this.zombies.push(z)
+    return z
+  }
+  stageCleared () {
+    const i = this.stageIndex
+    if (i === STAGES.length - 1) return this.gameOver(true)
+    this.state = 'draft'
+    this.selected = null
+    // 清理残留阳光：自动收集
+    for (const s of this.suns) if (!s.collecting) this.sun += s.value
+    this.suns = []
+    this.peas = []
+    UI.showDraft('第 ' + (i + 1) + ' 关完成！选择一项强化', this.rollUpgrades(i + 1), () => this.startStage(i + 1))
+  }
+  gameOver (win) {
+    this.state = win ? 'victory' : 'over'
+    Sound.stopMusic()
+    Sound.play(win ? 'victory' : 'lose')
+    this.selected = null
+    UI.showEnd(win)
+  }
+  onZombieKilled (z) {
+    this.kills++
+    const bonus = this.mods.killSun + this.stageMods.killSun
+    if (bonus) {
+      this.sun += bonus
+      this.floatText('+' + bonus, z.x + 20, zombieGround(z.row) - 110, '#ffe066')
+    }
+  }
+  // 打击感：震屏 + 顿帧 + 全屏闪光
+  impact (shake, stop = 0, flash = '') {
+    this.shake = Math.max(this.shake, shake)
+    this.hitstop = Math.max(this.hitstop, stop)
+    if (flash) this.screenFlash = { color: flash, t: 0.18 }
+  }
+  // 伤害数字
+  dmgText (v, x, y, big) {
+    this.effects.push(new Effect({ text: typeof v === 'number' ? Math.round(v) : v, x: x + rand(-8, 8), y, life: big ? 0.9 : 0.6, vy: big ? -70 : -50,
+      color: big ? '#ffd23f' : '#ffb640', stroke: '#5a1a00', size: big ? 30 : 18, pop: true }))
+  }
+  // 随机抽取三个强化
+  rollUpgrades (stage) {
+    const weights = stage === 0 ? { common: 70, rare: 27, legendary: 3 }
+      : { common: 58 - stage * 5, rare: 34 + stage * 2, legendary: 8 + stage * 3 }
+    const count = id => this.owned.filter(o => o === id).length
+    const avail = UPGRADES.filter(u => count(u.id) < (u.max || 1))
+    const res = []
+    for (let k = 0; k < 3 && avail.length; k++) {
+      const total = avail.reduce((a, u) => a + weights[u.rarity], 0)
+      let r = Math.random() * total, idx = 0
+      for (; idx < avail.length; idx++) { if ((r -= weights[avail[idx].rarity]) < 0) break }
+      res.push(avail.splice(Math.min(idx, avail.length - 1), 1)[0])
+    }
+    return res
+  }
+  takeUpgrade (u) {
+    this.owned.push(u.id)
+    u.apply(this.mods, this)
+    UI.updateRelics()
+  }
+  repairMowers () {
+    for (let r = 0; r < ROWS; r++) {
+      if (!this.mowers.some(m => m.row === r)) this.mowers.push(new Mower(r))
+    }
+  }
+  banner (text, time, sub) { UI.banner(text, time, sub) }
+  floatText (text, x, y, color) {
+    this.effects.push(new Effect({ text, x, y, life: 1.2, vy: -30, color, stroke: '#4a2a00', size: 22 }))
+  }
+
+  // ———————————————— 卡片 ————————————————
+  cost (type) { return Math.round(PLANTS[type].cost * this.mods.costMul / 5) * 5 }
+  cardCd (type) {
+    return PLANTS[type].cd * this.mods.cardCd * (EXPLOSIVES.includes(type) ? this.mods.explosiveCd : 1)
+  }
+  cardReady (c) { return c.cd <= 0 && this.sun >= this.cost(c.type) }
+  selectCard (i) {
+    const c = this.cards[i]
+    if (!c || this.state !== 'playing') return
+    if (this.selected === c.type) { this.selected = null; return }
+    if (this.cardReady(c)) {
+      this.selected = c.type
+      Sound.play('select')
+    } else {
+      // 冷却中或阳光不足：卡片抖动
+      c.shake = 0.3
+      Sound.play('deny')
+      if (this.sun < this.cost(c.type)) UI.flashSun()
+    }
+  }
+  plantAt (row, col) {
+    const type = this.selected
+    const c = this.cards.find(c => c.type === type)
+    if (!c || !this.cardReady(c)) return
+    if (this.plants.some(p => p.row === row && p.col === col && !p.dead)) return
+    this.sun -= this.cost(type)
+    c.cdMax = c.cd = this.cardCd(type)
+    this.plants.push(new Plant(type, row, col))
+    this.selected = null
+    FX.dirt(cellCx(col), plantGround(row) - 4)
+    Sound.play('plant')
+  }
+
+  // ———————————————— 更新 ————————————————
+  update (dt) {
+    this.runTime += dt
+    this.stageT += dt
+    // 刷怪
+    while (this.spawns.length && this.spawns[0].t <= this.stageT) {
+      const e = this.spawns.shift()
+      this.spawnZombie(e.type, e.row)
+      if (e.type === 'boss') {
+        UI.banner('👑 铁桶僵尸王出现了！', 2.5, '血量降低时它会跳到其他行')
+        Sound.play('bossRoar')
+        this.impact(0.5, 0)
       }
-      // 在可放置时，绘制植物
-      if (g.canLayUp && g.canDrawMousePlant) {
-        let cardSunVal = g.cardSunVal
-        if (cardSunVal.val <= _main.allSunVal) { // 在阳光数量足够时绘制
-          // 禁用当前卡片
-          cards[cardSunVal.idx].canClick = false
-          // 定时改变卡片可点击状态
-          cards[cardSunVal.idx].changeState()
-          // 绘制倒计时
-          cards[cardSunVal.idx].drawCountDown()
-          // 放置对应植物
-          plant = Plant.new(plant_info)
-          _main.plants.push(plant)
-          // 改变阳光数量
-          _main.sunnum.changeSunNum(-cardSunVal.val)
-          // 禁止绘制随鼠标移动植物
-          g.canDrawMousePlant = false
-        } else { // 阳光数量不足
-          // 禁止绘制随鼠标移动植物
-          g.canDrawMousePlant = false
-          // 清空随鼠标移动植物对象
-          g.mousePlant = null
-        }
+    }
+    if (!this.waveAnnounced && this.stageT >= this.waveT - 3) {
+      this.waveAnnounced = true
+      UI.banner('一大波僵尸正在接近！', 2.5)
+      Sound.play('wave')
+      Sound.setMusicMode('tense')
+      this.vignette = 3.5
+      this.skyFireAt = this.waveT + 1.5
+    }
+    if (this.skyFireAt && this.stageT >= this.skyFireAt) {
+      this.skyFireAt = 0
+      if (this.mods.skyFire) this.skyFire()
+    }
+    // 天降阳光
+    if (!this.stageMods.noSkySun) {
+      this.skySunT -= dt
+      if (this.skySunT <= 0) {
+        this.skySunT = 4.5 / this.mods.skySunRate
+        this.suns.push(new Sun(180 + Math.random() * 650, -80, 25, 'sky'))
+      }
+    }
+    for (const c of this.cards) c.cd = Math.max(0, c.cd - dt)
+    for (const p of this.plants) p.update(dt)
+    for (const z of this.zombies) z.update(dt)
+    for (const p of this.peas) p.update(dt)
+    for (const s of this.suns) s.update(dt)
+    for (const m of this.mowers) m.update(dt)
+    for (const e of this.effects) e.update(dt)
+    for (const p of this.particles) p.update(dt)
+    // 偶尔的僵尸呻吟
+    if (Math.random() < dt * 0.3 && this.zombies.some(z => z.alive && z.x < W)) Sound.play('groan')
+    this.vignette = Math.max(0, this.vignette - dt)
+    this.plants = this.plants.filter(p => !p.dead)
+    this.zombies = this.zombies.filter(z => !z.dead)
+    this.peas = this.peas.filter(p => !p.dead)
+    this.suns = this.suns.filter(s => !s.dead)
+    this.mowers = this.mowers.filter(m => !m.dead)
+    this.effects = this.effects.filter(e => !e.dead)
+    this.particles = this.particles.filter(p => !p.dead)
+    this.shake = Math.max(0, this.shake - dt)
+    // 失败判定
+    const intruder = this.zombies.find(z => z.alive && z.x < HOUSE_X)
+    if (intruder) {
+      if (this.mods.insurance > 0) {
+        this.mods.insurance--
+        blast(() => true)
+        for (const z of this.zombies) if (z.alive) z.damage(99999, { boom: true })
+        this.impact(0.6, 0.15, 'rgba(255,255,255,0.7)')
+        Sound.play('explode')
+        UI.banner('📜 末日保险生效！', 2.5, '全场僵尸已被消灭')
       } else {
-        // 禁止绘制随鼠标移动植物
-        g.canDrawMousePlant = false
-        // 清空随鼠标移动植物对象
-        g.mousePlant = null
+        return this.gameOver(false)
       }
     }
-    // 暂停按钮事件
-    document.getElementById('pauseGame').onclick = function (event) {
-      g.state = g.state_STOP
+    // 过关判定
+    if (!this.spawns.length && !this.zombies.some(z => z.alive)) this.stageCleared()
+    UI.updateHud()
+  }
+  // 天火：焚烧僵尸最多的两行
+  skyFire () {
+    const counts = [...Array(ROWS).keys()].map(r => ({ r, n: this.zombies.filter(z => z.alive && z.row === r && z.x < W).length }))
+    counts.sort((a, b) => b.n - a.n)
+    for (const { r, n } of counts.slice(0, 2)) {
+      if (!n) continue
+      const p = new Plant('jalapeno', r, 4)
+      p.anims.idle.t = 99
+      this.plants.push(p)
     }
-    // 重启游戏按钮事件
-    document.getElementById('restartGame').onclick = function (event) {
-      if (g.state === g.state_LOADING) { // 加载动画
-        g.state = g.state_START
-      } else {
-        g.state = g.state_RUNNING
-        // 开启向日葵的阳光生成定时器
-        for (let plant of _main.plants) {
-          if (plant.section === 'sunflower') {
-            plant.setSunTimer()
-          }
-        }
+  }
+
+  // ———————————————— 输入 ————————————————
+  cellAt (x, y) {
+    const col = Math.floor((x - LAWN_X) / CELL_W), row = Math.floor((y - LAWN_Y) / CELL_H)
+    return row >= 0 && row < ROWS && col >= 0 && col < COLS ? { row, col } : null
+  }
+  cardAt (x, y) {
+    if (x < 2 || x > CARD_W + 2) return -1
+    const i = Math.floor((y - 2) / (CARD_H + 2))
+    return i >= 0 && i < this.cards.length ? i : -1
+  }
+  onClick (x, y) {
+    if (this.state !== 'playing') return
+    // 优先收集阳光
+    const sun = [...this.suns].reverse().find(s => s.hitTest(x, y))
+    if (sun) return sun.collect()
+    const ci = this.cardAt(x, y)
+    if (ci >= 0) return this.selectCard(ci)
+    const cell = this.cellAt(x, y)
+    if (cell && this.selected === 'shovel') {
+      const p = this.plants.find(p => p.row === cell.row && p.col === cell.col && !p.busy)
+      if (p) {
+        p.dead = true
+        FX.dirt(p.x, plantGround(p.row) - 10, 14)
+        Sound.play('shovel')
       }
-      // 设置全局生成阳光、僵尸定时器
-      _main.setTimer()
+      this.selected = null
+    } else if (cell && this.selected) {
+      this.plantAt(cell.row, cell.col)
+    } else {
+      this.selected = null
     }
+  }
+  onKey (e) {
+    if (e.code === 'Space') { e.preventDefault(); this.togglePause() }
+    if (this.state !== 'playing') return
+    if (e.key === 'Escape') this.selected = null
+    if (e.key === 's' || e.key === 'S') this.toggleShovel()
+    if (e.key === 'f' || e.key === 'F') this.toggleSpeed()
+    if (e.key === 'm' || e.key === 'M') Sound.toggleMute()
+    const n = '1234567890'.indexOf(e.key)
+    if (n >= 0) this.selectCard(n)
+  }
+  toggleShovel () {
+    if (this.state !== 'playing') return
+    this.selected = this.selected === 'shovel' ? null : 'shovel'
+    Sound.play('select')
+  }
+  toggleSpeed () {
+    this.speed = this.speed === 1 ? 2 : 1
+    UI.updateHud()
+  }
+  togglePause () {
+    if (this.state === 'playing') { this.state = 'paused'; UI.showPause() }
+    else if (this.state === 'paused') { this.state = 'playing'; UI.hideAll() }
+  }
+
+  // ———————————————— 绘制 ————————————————
+  draw () {
+    const x = this.ctx
+    x.save()
+    if (this.shake > 0) x.translate((Math.random() - 0.5) * 10 * this.shake * 3, (Math.random() - 0.5) * 10 * this.shake * 3)
+    if (this.state === 'loading' || this.state === 'title') {
+      x.fillStyle = '#000'; x.fillRect(0, 0, W, H)
+      if (img('cover') && img('cover').complete) x.drawImage(img('cover'), (W - 900) / 2, 0)
+      x.restore()
+      return
+    }
+    x.drawImage(img('bg'), BG_X, 0)
+    for (const m of this.mowers) m.draw(x)
+    this.drawGhost(x)
+    // 按行绘制，保证遮挡关系
+    for (let r = 0; r < ROWS; r++) {
+      for (const p of this.plants) if (p.row === r) p.draw(x)
+      const zs = this.zombies.filter(z => z.row === r).sort((a, b) => b.x - a.x)
+      for (const z of zs) z.draw(x)
+    }
+    for (const p of this.peas) p.draw(x)
+    for (const p of this.particles) p.draw(x)
+    for (const e of this.effects) e.draw(x)
+    this.drawBossBar(x)
+    for (const s of this.suns) s.draw(x)
+    this.drawCards(x)
+    this.drawCursor(x)
+    x.restore()
+    this.drawScreenFx(x)
+  }
+  // 全屏闪光与警告边框
+  drawScreenFx (x) {
+    if (this.screenFlash) {
+      x.globalAlpha = Math.max(0, this.screenFlash.t / 0.18)
+      x.fillStyle = this.screenFlash.color
+      x.fillRect(0, 0, W, H)
+      x.globalAlpha = 1
+    }
+    if (this.vignette > 0) {
+      const a = Math.min(1, this.vignette) * (0.35 + 0.25 * Math.sin(this.vignette * 9))
+      const g = x.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, W * 0.62)
+      g.addColorStop(0, 'rgba(200,0,0,0)')
+      g.addColorStop(1, 'rgba(200,0,0,' + a + ')')
+      x.fillStyle = g
+      x.fillRect(0, 0, W, H)
+    }
+  }
+  drawCards (x) {
+    x.fillStyle = 'rgba(60, 35, 10, 0.55)'
+    x.fillRect(0, 0, CARD_W + 4, H)
+    this.cards.forEach((c, i) => {
+      const y = 2 + i * (CARD_H + 2)
+      // 拒绝时左右抖动
+      const sx = c.shake > 0 ? Math.sin(c.shake * 60) * 4 * (c.shake / 0.3) : 0
+      x.save()
+      x.translate(sx, 0)
+      const ready = this.cardReady(c)
+      if (!ready) x.filter = 'grayscale(0.8) brightness(0.65)'
+      x.drawImage(CARD_IMAGES[c.type], 2, y)
+      x.filter = 'none'
+      // 冷却遮罩
+      if (c.cd > 0) {
+        x.fillStyle = 'rgba(0,0,0,0.45)'
+        x.fillRect(3, y + 1, CARD_W - 2, (CARD_H - 2) * c.cd / c.cdMax)
+      }
+      // 阳光消耗
+      x.font = 'bold 17px sans-serif'
+      x.textAlign = 'center'
+      x.fillStyle = this.sun >= this.cost(c.type) ? '#3a2400' : '#c0392b'
+      x.fillText(this.cost(c.type), 82, y + 28)
+      x.textAlign = 'left'
+      // 快捷键
+      if (i < 10) {
+        x.font = '11px sans-serif'; x.fillStyle = 'rgba(58,36,0,0.6)'
+        x.fillText((i + 1) % 10, 88, y + 13)
+      }
+      if (this.selected === c.type || this.hoverCard === i) {
+        x.lineWidth = 3
+        x.strokeStyle = this.selected === c.type ? '#ffe14d' : 'rgba(255,255,255,0.7)'
+        roundRect(x, 2, y, CARD_W, CARD_H, 6); x.stroke()
+      }
+      x.restore()
+    })
+  }
+  // 种植位置预览
+  drawGhost (x) {
+    const cell = this.cellAt(this.mouse.x, this.mouse.y)
+    if (!cell || !this.selected || this.state !== 'playing') return
+    x.fillStyle = this.selected === 'shovel' ? 'rgba(255,80,80,0.18)' : 'rgba(255,255,255,0.18)'
+    x.fillRect(LAWN_X + cell.col * CELL_W, LAWN_Y + cell.row * CELL_H, CELL_W, CELL_H)
+    if (this.selected === 'shovel') return
+    if (this.plants.some(p => p.row === cell.row && p.col === cell.col)) return
+    const def = PLANTS[this.selected]
+    const image = FRAMES[def.anim.idle || def.anim.idleH][0]
+    x.globalAlpha = 0.45
+    x.drawImage(image, cellCx(cell.col) - image.width / 2 + (def.ox || 0), plantGround(cell.row) - image.height + (def.oy || 0))
+    x.globalAlpha = 1
+  }
+  drawCursor (x) {
+    if (!this.selected || this.state !== 'playing') return
+    const { x: mx, y: my } = this.mouse
+    if (this.selected === 'shovel') {
+      x.font = '38px sans-serif'
+      x.fillText('⛏️', mx - 12, my + 10)
+      return
+    }
+    const def = PLANTS[this.selected]
+    const image = FRAMES[def.anim.idle || def.anim.idleH][0]
+    x.drawImage(image, mx - image.width / 2 + (def.ox || 0), my - image.height / 2)
+  }
+  drawBossBar (x) {
+    const b = this.zombies.find(z => z.def.boss && z.alive)
+    if (!b) return
+    const w = 360, l = (W - w) / 2 + 60, t = 578
+    x.fillStyle = 'rgba(0,0,0,0.6)'; roundRect(x, l - 4, t - 4, w + 8, 18, 6); x.fill()
+    x.fillStyle = '#c0392b'; x.fillRect(l, t, w * b.hp / b.maxTotal, 10)
+    x.font = 'bold 13px sans-serif'; x.fillStyle = '#fff'; x.textAlign = 'center'
+    x.fillText('👑 铁桶僵尸王  ' + Math.ceil(b.hp), l + w / 2, t - 8)
+    x.textAlign = 'left'
+  }
+
+  // ———————————————— 主循环 ————————————————
+  loop (now) {
+    const dt = Math.min(0.05, (now - this.last) / 1000 || 0)
+    this.last = now
+    for (const c of this.cards) if (c.shake > 0) c.shake -= dt
+    if (this.screenFlash && (this.screenFlash.t -= dt) <= 0) this.screenFlash = null
+    if (this.hitstop > 0) {
+      this.hitstop -= dt
+    } else if (this.state === 'playing') {
+      // 2 倍速时拆成两步，避免穿模
+      for (let i = 0; i < this.speed && this.state === 'playing'; i++) this.update(dt)
+    }
+    this.draw()
+    requestAnimationFrame(t => this.loop(t))
+  }
+  bindInput () {
+    const toLocal = e => {
+      const rect = this.canvas.getBoundingClientRect()
+      return { x: (e.clientX - rect.left) / window.gameScale, y: (e.clientY - rect.top) / window.gameScale }
+    }
+    this.canvas.addEventListener('mousemove', e => {
+      this.mouse = toLocal(e)
+      const i = this.cardAt(this.mouse.x, this.mouse.y)
+      if (i !== this.hoverCard) {
+        this.hoverCard = i
+        UI.cardTip(i >= 0 && this.state === 'playing' ? this.cards[i].type : null, i)
+      }
+    })
+    this.canvas.addEventListener('mouseleave', () => { this.hoverCard = -1; UI.cardTip(null) })
+    this.canvas.addEventListener('mousedown', e => {
+      const p = toLocal(e)
+      if (e.button === 2) this.selected = null
+      else if (e.button === 0) this.onClick(p.x, p.y)
+    })
+    this.canvas.addEventListener('contextmenu', e => e.preventDefault())
+    window.addEventListener('keydown', e => this.onKey(e))
+    // 浏览器要求用户交互后才能播放声音
+    const unlock = () => Sound.init()
+    window.addEventListener('pointerdown', unlock)
+    window.addEventListener('keydown', unlock)
+    // 切到后台时自动暂停
+    document.addEventListener('visibilitychange', () => { if (document.hidden && this.state === 'playing') this.togglePause() })
   }
 }
