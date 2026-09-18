@@ -221,7 +221,7 @@ class Game {
     if (!this.deck.count && this.river.length) {
       this.deck.putBack(this.river)
       this.river = []
-      this.floatText('牌山摸空，弃牌洗回', HAND_X, HAND_Y + TILE_H + 18, '#fff')
+      this.floatText('牌山摸空，弃牌洗回', HAND_X, HAND_Y - 30, '#fff')
     }
     return this.deck.draw()
   }
@@ -255,7 +255,7 @@ class Game {
     if (!this.canHu) this.huReadyAt = -1
     if (this.tenpai && !wasTenpai && !this.canHu && !quiet) {
       Sound.play('tenpai')
-      this.floatText('听牌！', HAND_X + 150, HAND_Y + TILE_H + 20, '#ffe14d')
+      this.floatText('听牌！', 188, TRAY_Y - 14, '#ffe14d')
     }
     if (this.tenpai !== wasTenpai) Sound.setMusicMode(this.tenpai || this.waveAnnounced ? 'tense' : 'calm')
   }
@@ -283,7 +283,7 @@ class Game {
   deny (msg) {
     this.handShake = 0.3
     Sound.play('deny')
-    if (msg) this.floatText(msg, HAND_X + 120, HAND_Y + TILE_H + 20, '#ff8a7a')
+    if (msg) this.floatText(msg, HAND_X + 180, HAND_Y - 58, '#ff8a7a')
   }
   combine () {
     if (this.state !== 'playing') return
@@ -469,7 +469,7 @@ class Game {
     return row >= 0 && row < ROWS && col >= 0 && col < COLS ? { row, col } : null
   }
   handAt (x, y) {
-    if (y < HAND_Y - 10 || y > HAND_Y + TILE_H) return -1
+    if (y < HAND_Y - 14 || y > HAND_Y + TILE_H) return -1
     const i = Math.floor((x - HAND_X) / HAND_STEP)
     return i >= 0 && i < this.hand.length && x - HAND_X - i * HAND_STEP <= TILE_W ? i : -1
   }
@@ -563,6 +563,7 @@ class Game {
     for (const e of this.effects) e.draw(x)
     this.drawBossBar(x)
     this.drawPanel(x)
+    this.drawTray(x)
     this.drawHand(x)
     for (const s of this.drops) s.draw(x)
     this.drawHuFx(x)
@@ -587,10 +588,10 @@ class Game {
       x.fillRect(0, 0, W, H)
     }
   }
-  // 左侧面板：待种植物 + 操作按钮 + 听牌信息
+  // 左侧面板：待种植物
   drawPanel (x) {
     x.fillStyle = 'rgba(60, 35, 10, 0.6)'
-    x.fillRect(0, 0, CARD_W + 4, H)
+    x.fillRect(0, 0, CARD_W + 4, TRAY_Y)
     x.textAlign = 'center'
     x.font = 'bold 13px sans-serif'; x.fillStyle = '#f2e6b3'
     x.fillText('待种植物', 52, 17)
@@ -615,6 +616,18 @@ class Game {
         roundRect(x, 2, y, CARD_W, CARD_H, 6); x.stroke()
       }
     }
+    x.textAlign = 'left'
+  }
+  // 底部托盘：听牌信息 + 牌山 + 操作按钮（手牌由 drawHand 绘制）
+  drawTray (x) {
+    const g = x.createLinearGradient(0, TRAY_Y, 0, H)
+    g.addColorStop(0, '#6b4420'); g.addColorStop(1, '#3d2410')
+    x.fillStyle = g; x.fillRect(0, TRAY_Y, W, H - TRAY_Y)
+    x.fillStyle = '#2a1808'; x.fillRect(0, TRAY_Y, W, 3)
+    // 手牌凹槽
+    x.fillStyle = 'rgba(0,0,0,0.25)'
+    roundRect(x, HAND_X - 8, HAND_Y - 6, HAND_STEP * MJ.handSize + 4, TILE_H + 12, 10); x.fill()
+    x.textAlign = 'center'
     // 按钮
     const preview = this.meldPreview()
     for (const b of PANEL_BUTTONS) {
@@ -628,46 +641,46 @@ class Game {
       roundRect(x, b.x, b.y, b.w, b.h, 8)
       x.fillStyle = fill; x.fill()
       x.shadowBlur = 0
-      x.lineWidth = 2; x.strokeStyle = '#3d1f06'; x.stroke()
+      x.lineWidth = 2; x.strokeStyle = '#2a1808'; x.stroke()
       x.fillStyle = on ? '#fff' : 'rgba(255,255,255,0.55)'
-      x.font = 'bold ' + (b.big ? 24 : 16) + 'px sans-serif'
-      x.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + (b.big ? 8 : 6))
-      x.font = '10px sans-serif'
-      x.fillText(b.key, b.x + b.w - 9, b.y + 12)
+      x.font = 'bold ' + (b.big ? 32 : 18) + 'px sans-serif'
+      x.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + (b.big ? 11 : 6))
+      x.font = '11px sans-serif'
+      x.fillText(b.key, b.x + b.w - 10, b.y + 13)
     }
-    // 听牌信息
-    let y = 360
+    // 左侧：听牌信息
+    const cx = 188, y = TRAY_Y + 22
     if (this.canHu) {
-      x.font = 'bold 15px sans-serif'; x.fillStyle = '#ffe14d'
-      x.fillText('可以胡了！', 52, y)
+      x.font = 'bold 18px sans-serif'; x.fillStyle = '#ffe14d'
+      x.fillText('可以胡了！', cx, y + 4)
       const fan = Mahjong.calcFan(this.hand.map(h => h.t), { tsumo: this.stageT - this.huReadyAt <= 2 }, MJ.handSize)
-      x.font = '12px sans-serif'; x.fillStyle = '#fff'
-      x.fillText(fan.names.join('·') + ' ×' + fan.mul, 52, y + 20)
+      x.font = '13px sans-serif'; x.fillStyle = '#fff'
+      x.fillText(fan.names.join('·') + ' ×' + fan.mul, cx, y + 26)
     } else if (this.waits.length) {
-      x.font = 'bold 15px sans-serif'; x.fillStyle = '#ffe14d'
-      x.fillText('听牌', 52, y)
-      this.waits.slice(0, 8).forEach((t, k) => {
-        const tx = 8 + (k % 4) * 23, ty = y + 10 + Math.floor(k / 4) * 44
-        drawTile(x, t, tx, ty, 21, 28)
+      x.font = 'bold 14px sans-serif'; x.fillStyle = '#ffe14d'
+      x.fillText('听牌', cx, y - 4)
+      const n = Math.min(5, this.waits.length)
+      this.waits.slice(0, n).forEach((t, k) => {
+        const tx = cx - n * 13 + k * 26, ty = y + 2
+        drawTile(x, t, tx + 1, ty, 24, 32)
         x.font = '11px sans-serif'; x.fillStyle = '#f2e6b3'
-        x.fillText('剩' + this.deck.remaining(t), tx + 10, ty + 40)
+        x.fillText('剩' + this.deck.remaining(t), tx + 13, ty + 44)
       })
-    } else if (this.handRoom() <= 0 && this.hand.length >= MJ.handSize) {
-      x.font = '12px sans-serif'; x.fillStyle = '#ffb4a8'
-      x.fillText('手牌已满', 52, y)
-      x.fillText('组合或打出后', 52, y + 18)
-      x.fillText('才能继续摸牌', 52, y + 34)
+    } else if (this.hand.length >= MJ.handSize) {
+      x.font = 'bold 14px sans-serif'; x.fillStyle = '#ffb4a8'
+      x.fillText('手牌已满', cx, y + 2)
+      x.font = '12px sans-serif'
+      x.fillText('组合或打出后继续摸牌', cx, y + 22)
     }
-    // 牌山
+    // 牌山 + 摸牌进度条
     x.font = '12px sans-serif'; x.fillStyle = '#f2e6b3'
-    x.fillText('牌山 ' + this.deck.count + ' 张', 52, H - 26)
-    // 摸牌进度条
+    x.fillText('牌山 ' + this.deck.count + ' 张', cx, H - 16)
     const p = this.handRoom() > 0 ? 1 - Math.max(0, this.drawT) / MJ.drawInterval : 0
-    x.fillStyle = 'rgba(0,0,0,0.4)'; x.fillRect(12, H - 18, 80, 5)
-    x.fillStyle = '#9fd18b'; x.fillRect(12, H - 18, 80 * p, 5)
+    x.fillStyle = 'rgba(0,0,0,0.4)'; x.fillRect(cx - 60, H - 10, 120, 5)
+    x.fillStyle = '#9fd18b'; x.fillRect(cx - 60, H - 10, 120 * p, 5)
     x.textAlign = 'left'
   }
-  // 顶部手牌
+  // 底部手牌
   drawHand (x) {
     const sx = this.handShake > 0 ? Math.sin(this.handShake * 60) * 4 * (this.handShake / 0.3) : 0
     const hover = this.handAt(this.mouse.x, this.mouse.y)
@@ -680,7 +693,7 @@ class Game {
         continue
       }
       const h = this.hand[i]
-      const top = HAND_Y - (h.sel ? 9 : hover === i ? 3 : 0) - h.fresh * 20
+      const top = HAND_Y - (h.sel ? 14 : hover === i ? 4 : 0) - h.fresh * 24
       x.save()
       x.translate(h.sel ? sx : 0, 0)
       if (this.canHu) { x.shadowColor = '#ffd23f'; x.shadowBlur = 12 }
@@ -698,13 +711,13 @@ class Game {
     if (sel.length >= 2) {
       const seed = this.meldPreview()
       const text = seed ? '→ ' + (seed.label || PLANTS[seed.plant].name) + '（Q）' : '✗ 不成面子'
-      x.font = 'bold 13px sans-serif'
+      x.font = 'bold 15px sans-serif'
       const w = x.measureText(text).width + 16
       const l = HAND_X + this.hand.indexOf(sel[0]) * HAND_STEP
       x.fillStyle = seed ? 'rgba(40,110,30,0.9)' : 'rgba(140,40,30,0.85)'
-      roundRect(x, l, HAND_Y + TILE_H + 2, w, 18, 9); x.fill()
+      roundRect(x, l, HAND_Y - 42, w, 22, 11); x.fill()
       x.fillStyle = '#fff'
-      x.fillText(text, l + 8, HAND_Y + TILE_H + 15)
+      x.fillText(text, l + 8, HAND_Y - 26)
     }
   }
   // 胡牌大字
@@ -715,7 +728,7 @@ class Game {
     const s = k < 0.15 ? 0.5 + k / 0.15 * 0.9 : 1.4 - Math.min(0.4, (k - 0.15) * 0.8)
     x.save()
     x.globalAlpha = Math.min(1, f.t / 0.4)
-    x.translate(W / 2 + 40, H / 2 - 20)
+    x.translate(W / 2 + 40, TRAY_Y / 2 - 20)
     x.scale(s, s)
     x.textAlign = 'center'
     x.font = 'bold 110px ' + TILE_FONT

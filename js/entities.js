@@ -527,7 +527,7 @@ class TileDrop {
     }
   }
   hitTest (px, py) {
-    return !this.collecting && px > this.x - 8 && px < this.x + TILE_W + 8 && py > this.y - 8 && py < this.y + TILE_H + 8
+    return !this.collecting && px > this.x - 8 && px < this.x + DROP_W + 8 && py > this.y - 8 && py < this.y + DROP_H + 8
   }
   collect () {
     if (this.collecting) return
@@ -538,7 +538,7 @@ class TileDrop {
     }
     G.pendingDrops++
     this.collecting = true
-    FX.sparkle(this.x + TILE_W / 2, this.y + TILE_H / 2)
+    FX.sparkle(this.x + DROP_W / 2, this.y + DROP_H / 2)
     Sound.play('sun')
   }
   draw (x) {
@@ -548,10 +548,10 @@ class TileDrop {
     if (!this.collecting) {
       if (this.lucky) { x.shadowColor = '#ffc400'; x.shadowBlur = 14 + 6 * Math.sin(this.bob * 6) }
       x.fillStyle = this.lucky ? 'rgba(255,200,40,0.6)' : 'rgba(255,235,120,0.35)'
-      roundRect(x, this.x - 5, this.y + oy - 5, TILE_W + 10, TILE_H + 10, 9); x.fill()
+      roundRect(x, this.x - 5, this.y + oy - 5, DROP_W + 10, DROP_H + 10, 9); x.fill()
       x.shadowBlur = 0
     }
-    drawTile(x, this.tile, this.x, this.y + oy, TILE_W, TILE_H)
+    drawTile(x, this.tile, this.x, this.y + oy, DROP_W, DROP_H)
     x.globalAlpha = 1
   }
 }

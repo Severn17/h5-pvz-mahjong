@@ -116,20 +116,22 @@ function roundRect (x, l, t, w, h, r) {
 /**
  * 麻将牌面：程序化绘制，按牌种缓存成离屏画布
  */
-const TILE_W = 40, TILE_H = 54                 // 手牌尺寸
-const HAND_X = 112, HAND_Y = 8, HAND_STEP = 44  // 手牌区位置
+const TILE_W = 56, TILE_H = 76                  // 手牌尺寸（底部托盘）
+const DROP_W = 40, DROP_H = 54                  // 草坪上掉落的牌
+const HAND_X = 272, HAND_Y = 616, HAND_STEP = 60 // 手牌区位置：底部居中
 const SEED_Y = 26, SEED_STEP = 48               // 左侧待种植物槽
 const PANEL_BUTTONS = [
-  { action: 'combine', label: '组合', key: 'Q', x: 6, y: 180, w: 92, h: 38, color: '#3f8f2f' },
-  { action: 'discard', label: '打出', key: 'X', x: 6, y: 224, w: 92, h: 38, color: '#8a5a2b' },
-  { action: 'declareHu', label: '胡！', key: 'H', x: 6, y: 272, w: 92, h: 56, color: '#d9962a', big: true },
+  { action: 'combine', label: '组合', key: 'Q', x: 768, y: 612, w: 92, h: 38, color: '#3f8f2f' },
+  { action: 'discard', label: '打出', key: 'X', x: 768, y: 654, w: 92, h: 38, color: '#8a5a2b' },
+  { action: 'declareHu', label: '胡！', key: 'H', x: 868, y: 612, w: 124, h: 80, color: '#d9962a', big: true },
 ]
 const TILE_IMAGES = {}
 const TILE_COLOR = { m: '#b3261e', p: '#1f5fa8', s: '#1e7a3a' }
 const TILE_FONT = '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", serif'
 function tileImage (t) {
   if (TILE_IMAGES[t]) return TILE_IMAGES[t]
-  const S = 2                                  // 2 倍分辨率，缩放后依然清晰
+  const S = 3                                  // 3 倍分辨率，放大到手牌尺寸依然清晰
+  const TILE_W = DROP_W, TILE_H = DROP_H         // 以 40×54 为基准绘制
   const c = document.createElement('canvas')
   c.width = TILE_W * S; c.height = TILE_H * S
   const x = c.getContext('2d')

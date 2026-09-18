@@ -1,6 +1,6 @@
-// 将 1000x600 的游戏场景等比缩放铺满窗口
+// 将 1000x700 的游戏场景等比缩放铺满窗口
 (function () {
-  const SW = 1000, SH = 600
+  const SW = 1000, SH = 700
   window.gameScale = 1
   function fit () {
     const s = Math.min(window.innerWidth / SW, window.innerHeight / SH),
