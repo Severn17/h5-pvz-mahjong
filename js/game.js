@@ -34,6 +34,8 @@ class Game {
     this.allGroups = []              // 手牌中所有面子
     this.canHu = false
     this.tenpai = false
+    this.huReserve = []              // 已凑成、尚未释放的胡牌大招 [{ tiles, fan }]
+    this.drawBank = 0                // 手牌满时攒下的摸牌次数
     this.pendingDrops = 0            // 正在飞向手牌的牌
     this.tileSeq = 0
     this.handShake = 0
@@ -219,7 +221,7 @@ class Game {
     this.drops = []
     this.pendingDrops = 0
     this.drawT = MJ.drawInterval
-    this.huReadyAt = -1
+    this.drawBank = 0
     const n = Math.min(MJ.handSize, MJ.startHand + this.mods.startBonus + this.stageMods.bonusDraw)
     for (let i = 0; i < n; i++) this.drawTile(true)
     this.onHandChanged(true)
@@ -233,9 +235,9 @@ class Game {
     }
     return this.deck.draw()
   }
-  drawTile (quiet) {
+  drawTile (quiet, lucky = 0) {
     if (this.handRoom() <= 0) return false
-    const t = this.drawFromDeck()
+    const t = (this.random() < lucky && this.takeUseful()) || this.drawFromDeck()
     if (!t) return false
     return this.addToHand(t, quiet)
   }
@@ -258,16 +260,26 @@ class Game {
     this.allGroups = Mahjong.meldGroups(tiles, m => !!meldToSeed(m))
     this.hintGroups = Mahjong.pickGroups(this.allGroups)
     this.tenpai = this.canHu || this.waits.length > 0
-    if (this.canHu && this.huReadyAt < 0) {
-      this.huReadyAt = this.stageT
-      if (!quiet) Sound.play('tenpai')
-    }
-    if (!this.canHu) this.huReadyAt = -1
+    // 凑成胡牌：自动存入大招储备，手牌重新摸，麻将这边不会卡住
+    if (this.canHu && this.huReserve.length < this.reserveCap()) return this.storeHu()
     if (this.tenpai && !wasTenpai && !this.canHu && !quiet) {
       Sound.play('tenpai')
       this.floatText('听牌！', 188, TRAY_Y - 14, '#ffe14d')
     }
     if (this.tenpai !== wasTenpai) Sound.setMusicMode(this.tenpai || this.waveAnnounced ? 'tense' : 'calm')
+  }
+  reserveCap () { return MJ.huReserve + this.mods.reserveBonus }
+  storeHu () {
+    const tiles = this.hand.map(h => h.t)
+    const fan = Mahjong.calcFan(tiles, {}, MJ.handSize)
+    this.huReserve.push({ tiles, fan })
+    this.deck.putBack(tiles)
+    this.hand = []
+    for (let i = 0; i < MJ.huRedraw; i++) this.drawTile(true)
+    this.tenpai = false
+    this.onHandChanged(true)
+    Sound.play('tenpai')
+    UI.banner('🀄 胡牌大招已就绪　' + fan.names.join('·') + ' ×' + fan.mul, 2, '按 H 释放 · 留到"一大波僵尸"时释放 ×' + MJ.waveBonus)
   }
   selectedTiles () { return this.hand.filter(h => h.sel) }
   toggleHints () {
@@ -354,34 +366,36 @@ class Game {
   }
   declareHu () {
     if (this.state !== 'playing') return
-    if (!this.canHu) return this.deny(this.tenpai ? '还差一张' : '还不能胡')
-    const tiles = this.hand.map(h => h.t)
-    const tsumo = this.stageT - this.huReadyAt <= 2 || (this.mods.freeTsumo && !this.stageHuCount)
-    const fan = Mahjong.calcFan(tiles, { tsumo }, MJ.handSize)
-    const dmg = MJ.huDamage * fan.mul * this.mods.huDmg
+    if (!this.huReserve.length) return this.deny(this.tenpai ? '还差一张就能胡' : '还没有胡牌大招')
     const hits = this.zombies.filter(z => z.alive && z.x < W)
+    if (!hits.length) return this.deny('场上没有僵尸，留着大招吧')
+    const fan = this.releaseFan(this.huReserve.shift().fan)
+    const dmg = MJ.huDamage * fan.mul * this.mods.huDmg
     for (const z of hits) z.damage(z.def.boss ? Math.min(dmg, z.maxTotal * MJ.huBossCap) : dmg, { boom: dmg >= 900 })
     for (const z of hits) burst(z.x + 30, zombieGround(z.row) - 60, { n: 8, colors: ['#ffe14d', '#fff3a8', '#ff9a3c'], speed: [80, 220], size: [2, 4], life: [0.4, 0.8], up: 120 })
     this.huCount++
     this.stageHuCount++
     if (!this.bestFan || fan.mul > this.bestFan.mul) this.bestFan = fan
-    this.huFx = { t: 1.6, fan, text: hits.length ? '全场 ' + Math.round(dmg) + ' 伤害 · 命中 ' + hits.length + ' 只' : '场上没有僵尸' }
+    this.huFx = { t: 1.6, fan, text: '全场 ' + Math.round(dmg) + ' 伤害 · 命中 ' + hits.length + ' 只' }
     this.impact(0.6, 0.15, 'rgba(255,215,80,0.6)')
     Sound.play('hu')
-    // 手牌洗回牌山，重新摸牌
-    this.deck.putBack(tiles)
-    this.hand = []
-    for (let i = 0; i < MJ.huRedraw; i++) this.drawTile(true)
-    this.onHandChanged(true)
-    this.drawT = MJ.drawInterval
+    // 储备满时手里的胡牌在等待，腾出位置后自动存入
+    if (this.canHu) this.onHandChanged(true)
   }
-  // 掉落的牌：有一定概率是能直接凑成面子的"好牌"
+  // 释放时的番数：一大波僵尸期间额外加成
+  releaseFan (fan) {
+    if (!this.waveAnnounced) return fan
+    return { mul: Math.min(Mahjong.FAN_CAP, fan.mul * MJ.waveBonus), names: [...fan.names, '迎战大波'] }
+  }
+  // 从牌山取一张"有效牌"（能和手里两张直接组成面子），没有则返回 null
+  takeUseful () {
+    const pool = Mahjong.usefulTiles(this.hand.map(h => h.t)).filter(k => this.deck.remaining(k) > 0)
+    return pool.length ? this.deck.take(pool[Math.floor(this.random() * pool.length)]) : null
+  }
+  // 掉落的牌：有一定概率是好牌（金色光晕）
   dropTile (x, y, source) {
-    let t = null, lucky = false
-    if (this.random() < MJ.luckyDrop) {
-      const pool = Mahjong.usefulTiles(this.hand.map(h => h.t)).filter(k => this.deck.remaining(k) > 0)
-      if (pool.length) { t = this.deck.take(pool[Math.floor(this.random() * pool.length)]); lucky = true }
-    }
+    let t = this.random() < MJ.luckyDrop ? this.takeUseful() : null
+    const lucky = !!t
     if (!t) t = this.drawFromDeck()
     if (t) this.drops.push(new TileDrop(t, x, y, source, lucky))
   }
@@ -439,11 +453,14 @@ class Game {
         this.dropTile(180 + Math.random() * 650, -60, 'sky')
       }
     }
-    // 自动摸牌（手牌满时暂停）
-    if (this.handRoom() > 0) {
-      this.drawT -= dt * this.mods.drawRate * this.stageMods.drawRate
-      if (this.drawT <= 0 && this.drawTile()) this.drawT = MJ.drawInterval
+    // 自动摸牌：手牌满时不浪费，先攒起来，腾出位置后立即补进
+    this.drawT -= dt * this.mods.drawRate * this.stageMods.drawRate
+    if (this.drawT <= 0) {
+      if (this.handRoom() > 0) { if (this.drawTile(false, MJ.luckyDraw)) this.drawT = MJ.drawInterval }
+      else if (this.drawBank < MJ.drawBank) { this.drawBank++; this.drawT = MJ.drawInterval }
+      else this.drawT = 0
     }
+    if (this.drawBank > 0 && this.handRoom() > 0 && this.drawTile(false, MJ.luckyDraw)) this.drawBank--
     for (const h of this.hand) h.fresh = Math.max(0, h.fresh - dt)
     for (const p of this.plants) p.update(dt)
     for (const z of this.zombies) z.update(dt)
@@ -666,7 +683,8 @@ class Game {
     // 按钮
     const preview = this.meldPreview()
     for (const b of PANEL_BUTTONS) {
-      const on = b.action === 'combine' ? !!preview : b.action === 'discard' ? this.selectedTiles().length === 1 : this.canHu
+      const ready = this.huReserve.length > 0
+      const on = b.action === 'combine' ? !!preview : b.action === 'discard' ? this.selectedTiles().length === 1 : ready
       let fill = on ? b.color : 'rgba(120,100,80,0.55)'
       if (b.action === 'declareHu' && on) {
         const k = 0.5 + 0.5 * Math.sin(this.runTime * 8)
@@ -678,19 +696,31 @@ class Game {
       x.shadowBlur = 0
       x.lineWidth = 2; x.strokeStyle = '#2a1808'; x.stroke()
       x.fillStyle = on ? '#fff' : 'rgba(255,255,255,0.55)'
-      x.font = 'bold ' + (b.big ? 32 : 18) + 'px sans-serif'
-      x.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + (b.big ? 11 : 6))
+      if (b.big && ready) {
+        // 大招已就绪：显示番型、倍率、储备数量
+        const fan = this.releaseFan(this.huReserve[0].fan)
+        x.font = 'bold 28px sans-serif'
+        x.fillText(b.label, b.x + b.w / 2, b.y + 34)
+        x.font = 'bold 12px sans-serif'
+        x.fillText(fan.names.join('·'), b.x + b.w / 2, b.y + 53)
+        x.font = 'bold 14px sans-serif'; x.fillStyle = this.waveAnnounced ? '#fff36b' : '#fff'
+        x.fillText('×' + fan.mul + (this.huReserve.length > 1 ? '　储备 ' + this.huReserve.length : ''), b.x + b.w / 2, b.y + 71)
+        x.fillStyle = '#fff'
+      } else {
+        x.font = 'bold ' + (b.big ? 32 : 18) + 'px sans-serif'
+        x.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + (b.big ? 11 : 6))
+      }
       x.font = '11px sans-serif'
       x.fillText(b.key, b.x + b.w - 10, b.y + 13)
     }
     // 左侧：听牌信息
     const cx = 188, y = TRAY_Y + 22
     if (this.canHu) {
-      x.font = 'bold 18px sans-serif'; x.fillStyle = '#ffe14d'
-      x.fillText('可以胡了！', cx, y + 4)
-      const fan = Mahjong.calcFan(this.hand.map(h => h.t), { tsumo: this.stageT - this.huReadyAt <= 2 }, MJ.handSize)
-      x.font = '13px sans-serif'; x.fillStyle = '#fff'
-      x.fillText(fan.names.join('·') + ' ×' + fan.mul, cx, y + 26)
+      // 储备已满，手里又凑成了一副
+      x.font = 'bold 15px sans-serif'; x.fillStyle = '#ffe14d'
+      x.fillText('又胡了一副！', cx, y + 2)
+      x.font = '12px sans-serif'; x.fillStyle = '#fff'
+      x.fillText('储备已满，先释放大招', cx, y + 22)
     } else if (this.waits.length) {
       x.font = 'bold 14px sans-serif'; x.fillStyle = '#ffe14d'
       x.fillText('听牌', cx, y - 4)
@@ -705,12 +735,12 @@ class Game {
       x.font = 'bold 14px sans-serif'; x.fillStyle = '#ffb4a8'
       x.fillText('手牌已满', cx, y + 2)
       x.font = '12px sans-serif'
-      x.fillText('组合或打出后继续摸牌', cx, y + 22)
+      x.fillText(this.drawBank ? '新牌已攒着，腾出位置就补进' : '新牌会先攒着（最多 ' + MJ.drawBank + ' 张）', cx, y + 22)
     }
     // 牌山 + 摸牌进度条
     x.font = '12px sans-serif'; x.fillStyle = '#f2e6b3'
-    x.fillText('牌山 ' + this.deck.count + ' 张', cx, H - 16)
-    const p = this.handRoom() > 0 ? 1 - Math.max(0, this.drawT) / MJ.drawInterval : 0
+    x.fillText('牌山 ' + this.deck.count + ' 张' + (this.drawBank ? '　待摸 +' + this.drawBank : ''), cx, H - 16)
+    const p = 1 - Math.max(0, this.drawT) / MJ.drawInterval
     x.fillStyle = 'rgba(0,0,0,0.4)'; x.fillRect(cx - 60, H - 10, 120, 5)
     x.fillStyle = '#9fd18b'; x.fillRect(cx - 60, H - 10, 120 * p, 5)
     x.textAlign = 'left'

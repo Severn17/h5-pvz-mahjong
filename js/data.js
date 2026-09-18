@@ -21,13 +21,17 @@ const zombieGround = r => rowTop(r) + 94
 const MJ = {
   handSize: 8,          // 手牌上限 = 胡牌张数（2 面子 + 1 雀头 / 4 对）
   startHand: 7,         // 每关起手张数
-  drawInterval: 2,      // 自动摸牌间隔（秒）
+  drawInterval: 3.5,    // 自动摸牌间隔（秒）
   skyDrop: 4,           // 天降牌间隔（秒）
   luckyDrop: 0.5,       // 掉落的牌是"有效牌"（能直接凑成面子）的概率
+  luckyDraw: 0.5,       // 自动摸牌是"有效牌"的概率
   seedSlots: 3,         // 待种植物槽
   huDamage: 300,        // 胡牌基础伤害 × 番数
   huBossCap: 0.3,       // 胡牌对僵尸王的伤害上限（最大生命比例）
-  huRedraw: 5,          // 胡牌后重新摸几张
+  huRedraw: 5,          // 胡牌存入储备后重新摸几张
+  huReserve: 1,         // 胡牌大招储备上限
+  waveBonus: 1.5,       // "一大波僵尸"期间放大招的倍率
+  drawBank: 2,          // 手牌满时最多攒几次摸牌
   startSeeds: ['sunflower', 'peashooter'],   // 每关开局赠送的待种植物
 }
 
@@ -159,7 +163,7 @@ const ZOMBIES = {
       lostwalk: 'z/paper/lostwalk', lostattack: 'z/paper/lostattack', die: 'z/paper/die' } },
   bucket: { name: '铁桶僵尸', hp: 270, armor: 1100, speed: 30, cost: 4, ax: 65, ay: 142,
     anim: { walk: 'z/bucket/walk', attack: 'z/bucket/attack' } },
-  boss: { name: '铁桶僵尸王', hp: 1800, armor: 0, speed: 16, cost: 0, ax: 65, ay: 142, scale: 1.7, boss: true,
+  boss: { name: '铁桶僵尸王', hp: 3600, armor: 0, speed: 16, cost: 0, ax: 65, ay: 142, scale: 1.7, boss: true,
     anim: { walk: 'z/bucket/walk', attack: 'z/bucket/attack' } },
 }
 // 普通僵尸系共用的失去护具/头部/死亡动画
@@ -174,9 +178,9 @@ const ZOMBIE_COMMON = {
  */
 const STAGES = [
   { budget: 5, spawnTime: 14, pool: { normal: 1 }, suits: ['p', 's', 'z'] },   // 第 1 关不放萬，更容易凑面子
-  { budget: 13, spawnTime: 17, pool: { normal: 5, cone: 3, paper: 2 } },
-  { budget: 22, spawnTime: 20, pool: { normal: 4, cone: 3, paper: 2, bucket: 1 } },
-  { budget: 14, spawnTime: 18, pool: { normal: 3, cone: 3, paper: 2, bucket: 2 }, boss: true },
+  { budget: 16, spawnTime: 17, pool: { normal: 5, cone: 3, paper: 2 } },
+  { budget: 38, spawnTime: 26, pool: { normal: 4, cone: 3, paper: 2, bucket: 1 } },
+  { budget: 28, spawnTime: 24, pool: { normal: 3, cone: 3, paper: 2, bucket: 2 }, boss: true },
 ]
 
 /**
@@ -254,8 +258,8 @@ const UPGRADES = [
     apply: m => { m.cherryRange = 2 } },
   { id: 'hungry', name: '饥肠辘辘', icon: '👄', rarity: 'common', desc: '大嘴花消化时间 -70%。',
     apply: m => { m.digest *= 0.3 } },
-  { id: 'self_draw', name: '自摸高手', icon: '🙌', rarity: 'rare', desc: '每关第一次胡牌必定算作自摸（×1.5）。',
-    apply: m => { m.freeTsumo = true } },
+  { id: 'reserve_plus', name: '蓄势待发', icon: '🀄', rarity: 'rare', desc: '胡牌大招可以多储备 1 个。',
+    apply: m => { m.reserveBonus += 1 } },
   { id: 'insurance', name: '末日保险', icon: '📜', rarity: 'legendary', desc: '僵尸首次闯入房子时不会失败，改为消灭全场僵尸。',
     apply: m => { m.insurance += 1 } },
   { id: 'sky_fire', name: '天火', icon: '☄️', rarity: 'legendary', desc: '每当“一大波僵尸”来袭，自动焚烧僵尸最多的两行。',
@@ -273,7 +277,7 @@ const baseMods = () => ({
   wallnutHp: 1, plantHp: 1, thorns: 0, spikeDmg: 1, spikePierceArmor: false, regen: 0, mowerReturn: false,
   mineArm: 6, cherryRange: 1, digest: 1,
   sunflowerRate: 1, sunflowerAmt: 1, skySunRate: 1, autoCollect: false,
-  drawRate: 1, startBonus: 0, huDmg: 1, killDraw: false, tenpaiRage: false, freeTsumo: false,
+  drawRate: 1, startBonus: 0, huDmg: 1, killDraw: false, tenpaiRage: false, reserveBonus: 0,
   insurance: 0, skyFire: false, zombieSpeed: 1,
 })
 
