@@ -1,5 +1,7 @@
 # 植物麻将 · 肉鸽塔防
 
+[![test](https://github.com/Severn17/h5-pvz-mahjong/actions/workflows/test.yml/badge.svg)](https://github.com/Severn17/h5-pvz-mahjong/actions/workflows/test.yml)
+
 **用麻将凑牌代替阳光来种植物的塔防小游戏**：摸牌 → 凑顺子 / 刻子种植物 → 凑成胡牌攒一发全屏大招。原生 JS，无构建，浏览器直接玩。
 
 **在线试玩：<https://yangshiqi.cn/h5-pvz-mahjong/>**
