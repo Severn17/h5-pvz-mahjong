@@ -1,84 +1,94 @@
-## h5小游戏—植物大战僵尸v1.18
+# 植物麻将 · 肉鸽塔防
 
-本项目是利用原生js实现的h5小游戏，在实现时使用了大量es6语法，对于es6语法不太熟悉的小伙伴可以先查阅相关资料了解一下
+**用麻将凑牌代替阳光来种植物的塔防小游戏**：摸牌 → 凑顺子 / 刻子种植物 → 凑成胡牌攒一发全屏大招。原生 JS，无构建，浏览器直接玩。
 
-**demo**：[线上地址](https://yangyunhe369.github.io/h5-game-plantsVSzombies/)
+> 这是一个 **AWS AI-DLC（AI-Driven Development Life Cycle）学习展示项目**：在一个开源 H5 塔防游戏的基础上，用 AI 驱动的开发流程完成"麻将经济"玩法改造。开发过程文档见 [`docs/aidlc/`](docs/aidlc/README.md)。
 
-**代码详解**：[博客链接](http://www.yangyunhe.me/2018/h5-game-plantsVSzombies/)
+> ⚠️ 本项目基于 [yangyunhe369/h5-game-plantsVSzombies](https://github.com/yangyunhe369/h5-game-plantsVSzombies)（MIT）二次开发，详见文末[来源与致谢](#来源与致谢)。游戏美术版权归 PopCap / EA 所有，**仅供学习交流，不得商用**。
 
-## 项目截图
+![游戏截图：选中三张九条，即将组合出三线射手](images/screenshot-mahjong.jpg)
 
-![](images/screenshot1.png)
+## 快速开始
 
-## 已完成功能：
-- [x] 绘制游戏场景：背景、阳光计分板、植物卡片（用于放置植物）、植物（6种）、僵尸（1种）
-- [x] 植物和僵尸的攻击判定、死亡判定
-- [x] 角色动画由一帧一帧图片不停切换绘制实现，可绘制流畅动画效果
-- [x] 角色动画根据角色状态自动切换，植物动画包括（普通形态、攻击形态），僵尸动画包括（普通形态、移动形态、攻击形态、濒死形态、死亡形态）
-- [x] 阳光自动生成、植物放置需消耗阳光，僵尸随机生成
-- [x] 游戏包含僵尸、植物独立胜利条件判定
-- [x] 游戏状态：Loading、游戏运行、游戏暂停、游戏结束（玩家胜利）、游戏结束（僵尸胜利）
-
-## 更新代码
-
-v1.1  优化代码，添加向日葵，能自动生成阳光
-
-v1.15 优化代码，修复添加新植物使同行僵尸攻击判定失效bug，添加坚果墙
-
-v1.17 优化代码，添加樱桃炸弹
-
-v1.18 优化代码，添加除草车可清除整行僵尸
-
-v1.2  优化代码，添加食人花
-
-## 下载源码
-
-``` bash
-git clone https://github.com/yangyunhe369/h5-game-plantsVSzombies.git
+```bash
+npm start      # python3 -m http.server 8080，然后打开 http://localhost:8080
+npm test       # 麻将核心逻辑单元测试（node --test，需要 Node 18+）
 ```
+
+URL 加 `?seed=123` 可以固定牌山，方便复现。
+
+## 怎么玩
+
+- **凑牌种植物**：选中 3 张组成面子（顺子或刻子）→ 生成待种植物（最多暂存 3 个）→ 点草坪种下。
+  - 条 = 攻击（射手类），饼 = 防御（坚果、地刺、土豆地雷），萬 = 功能（向日葵、大嘴花、窝瓜；萬刻子是立即摸 2 张），中发白刻子 = 爆发。
+  - 中发白的对子也能打出，效果减半。
+  - 能组成的面子会用彩色框提示；点一张牌自动选中它所在的面子，再点一次就组合。
+- **胡牌大招**：手牌凑成 2 面子 + 1 雀头（或 4 对子）自动存成大招，按 `H` 释放，对全场僵尸造成 `300 × 番数` 伤害（强化可加成，对 Boss 最多造成 30% 最大生命）。"一大波僵尸"预告之后释放额外 ×1.5；场上没有僵尸时不能释放。
+- 第 1 关不放萬字牌，每关开局赠送向日葵 + 豌豆射手。
+
+| 按键 | 作用 |
+|---|---|
+| `Q` / `Enter` | 组合选中的牌 |
+| `X` / `Delete` / `Backspace` / 右键手牌 | 打出 |
+| `H` | 释放胡牌大招 |
+| `1`–`3` | 选择待种植物 |
+| `T` | 开关面子提示 |
+| `S` | 铲子 |
+| `F` | 2 倍速 |
+| `M` | 静音 |
+| `Space` | 暂停 |
+| `Esc` / 右键空白处 | 取消选择 |
+
+## 相对原项目改了什么
+
+| 分支 / 标签 | 内容 |
+|---|---|
+| `upstream-v1.2` | 原作者的最后版本（未改动） |
+| `baseline-roguelike` | 此前本地做的"肉鸽版"：重写引擎（实体 / 数据 / UI / 合成音效）、4 关与关卡特性、强化三选一、导入新素材。作为本次改造的基线 |
+| `mahjong`（默认分支） | 本次 AI-DLC 改造：麻将手牌系统替代阳光经济 |
+
+主要新增 / 改动：
+
+- `js/mahjong.js`（新增）：纯逻辑的牌山、面子识别、胡牌回溯拆解、听牌、番型计算，浏览器和 Node 共用
+- `tests/mahjong.test.js`（新增）：17 项单元测试
+- `js/game.js` / `js/data.js` / `js/ui.js` / `js/entities.js`：阳光与卡片冷却 → 手牌、待种植物槽、胡牌储备；数值与强化池改写
+- `js/assets.js` / `index.html` / `css/style.css` 等：牌面程序化绘制、底部手牌托盘
+- `docs/PLAN.md`：执行计划与每轮调整记录
+
+完整差异：`git diff upstream-v1.2..mahjong`，或只看本次改造：`git log baseline-roguelike..mahjong`。
 
 ## 目录结构
 
 ```
 .
-├─ index.html                   // 首页html
-│  
-├─ css                          // css样式资源文件
-├─ images                       // 图片资源文件  
-└─ js
-   ├─ common.js                 // 公共方法
-   ├─ scene.js                  // 游戏场景相关类
-   ├─ game.js                   // 游戏主要运行逻辑
-   └─ main.js                   // 游戏运行主函数
+├─ index.html          页面骨架与脚本加载顺序
+├─ package.json        npm start / npm test
+├─ css/                样式
+├─ images/             图片素材
+├─ js/
+│  ├─ mahjong.js       麻将核心逻辑（纯函数，可单测）
+│  ├─ data.js          数值表：植物、僵尸、关卡、强化、麻将参数 MJ
+│  ├─ game.js          主循环、关卡流程、输入、绘制
+│  ├─ entities.js      植物、僵尸、子弹、掉落牌等实体
+│  ├─ ui.js            HUD、三选一、暂停、结算
+│  ├─ assets.js        素材加载与牌面程序化绘制
+│  ├─ manifest.js      素材清单（由 tools/import_assets.py 生成）
+│  ├─ audio.js         Web Audio 实时合成的音效与音乐
+│  └─ fit.js / main.js 屏幕适配、入口
+├─ tests/              单元测试
+├─ tools/              素材导入脚本
+├─ .github/workflows/  CI：自动运行测试
+└─ docs/
+   ├─ PLAN.md          执行计划
+   └─ aidlc/           AI-DLC 过程文档
 ```
 
-* common.js => 引入公共方法
-* scene.js => 引入游戏场景素材相关类，包括角色类、动画类
-* game.js => 引入游戏引擎
-* main.js => 游戏运行主函数
+## 来源与致谢
 
-## 说明
-
-如果对您有帮助，您可以点右上角 "Star" 支持一下 谢谢！ ^_^
-
-或者您可以 "follow" 一下，我会不断开源更多的有趣的项目
-
-## 个人简介
-
-作者：弦云孤赫(David Yang)
-
-职业：web前端开发工程师
-
-爱好：网游、音乐（吉他）
-
-## 联系方式
-
-QQ：314786482
-
-微信：yangyunhe_yyh
-
-坐标：四川成都
+- 原始游戏：[yangyunhe369/h5-game-plantsVSzombies](https://github.com/yangyunhe369/h5-game-plantsVSzombies)，作者 弦云孤赫（David Yang），MIT License。本仓库保留了原项目的完整提交历史。
+- 部分僵尸 / 植物素材：通过 `tools/import_assets.py` 从 [marblexu/PythonPlantsVsZombies](https://github.com/marblexu/PythonPlantsVsZombies) 导入。
+- 《植物大战僵尸》名称与美术版权归 PopCap Games / Electronic Arts 所有。音效和音乐由 `js/audio.js` 实时合成，不使用原版音频。本项目为非商业的学习展示，不提供任何商业用途授权。
 
 ## License
 
-[MIT](https://github.com/yangyunhe369/h5-game-plantsVSzombies/blob/master/LICENSE)
+代码部分以 [MIT](LICENSE) 发布，美术素材不在授权范围内（见上）。
