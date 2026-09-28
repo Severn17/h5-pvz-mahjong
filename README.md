@@ -2,6 +2,8 @@
 
 **用麻将凑牌代替阳光来种植物的塔防小游戏**：摸牌 → 凑顺子 / 刻子种植物 → 凑成胡牌攒一发全屏大招。原生 JS，无构建，浏览器直接玩。
 
+**在线试玩：<https://yangshiqi.cn/h5-pvz-mahjong/>**
+
 > 这是一个 **AWS AI-DLC（AI-Driven Development Life Cycle）学习展示项目**：在一个开源 H5 塔防游戏的基础上，用 AI 驱动的开发流程完成"麻将经济"玩法改造。开发过程文档见 [`docs/aidlc/`](docs/aidlc/README.md)。
 
 > ⚠️ 本项目基于 [yangyunhe369/h5-game-plantsVSzombies](https://github.com/yangyunhe369/h5-game-plantsVSzombies)（MIT）二次开发，详见文末[来源与致谢](#来源与致谢)。游戏美术版权归 PopCap / EA 所有，**仅供学习交流，不得商用**。
